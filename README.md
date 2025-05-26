@@ -103,7 +103,7 @@ Prince_vibe_backend/
    CLOUDINARY_API_SECRET=your_cloudinary_api_secret
    
    # CORS
-   FRONTEND_URL=https://princevibe-eccomerce.vercel.app
+   FRONTEND_URL=http://localhost:3000
    ```
 
 4. **Start the server**

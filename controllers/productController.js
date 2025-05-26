@@ -467,7 +467,7 @@ const updateProduct = async (req, res) => {
         message: 'Product not found'
       });
     }
-
+    
     // Parse form data similar to createProduct
     let updateData = {};
 
@@ -591,7 +591,7 @@ const updateProduct = async (req, res) => {
     );
 
     console.log('Product updated successfully:', updatedProduct._id);
-
+    
     res.status(200).json({
       success: true,
       message: 'Product updated successfully',
