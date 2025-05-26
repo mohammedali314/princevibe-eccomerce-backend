@@ -12,6 +12,7 @@ dotenv.config({
 // Import routes
 const productRoutes = require('./routes/productRoutes');
 const adminRoutes = require('./routes/adminRoutes');
+const orderRoutes = require('./routes/orderRoutes');
 
 // Create Express app
 const app = express();
@@ -66,6 +67,7 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 // API Routes
 app.use('/api/products', productRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/orders', orderRoutes);
 
 // Basic health check route
 app.get('/api/health', (req, res) => {
