@@ -237,7 +237,6 @@ productSchema.index({ category: 1, isActive: 1 });
 productSchema.index({ price: 1 });
 productSchema.index({ rating: -1 });
 productSchema.index({ createdAt: -1 });
-productSchema.index({ 'seo.slug': 1 });
 productSchema.index({ tags: 1 });
 
 // Static method to get products by category
