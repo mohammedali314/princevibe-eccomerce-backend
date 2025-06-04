@@ -2,12 +2,13 @@ const express = require('express');
 const Order = require('../models/Order');
 const Product = require('../models/Product');
 const emailService = require('../utils/emailService');
+const { authenticate, optionalAuth } = require('../middleware/auth');
 
 const router = express.Router();
 
 // @desc    Create a new order
 // @route   POST /api/orders
-// @access  Public
+// @access  Public (with optional authentication)
 const createOrder = async (req, res) => {
   try {
     const { customer, items, summary, payment, notes } = req.body;
@@ -50,7 +51,7 @@ const createOrder = async (req, res) => {
     const productIds = items.map(item => item.productId);
     const products = await Product.find({ _id: { $in: productIds } });
 
-    // Validate prices and stock
+    // Validate prices and stock (skip stock validation for now as not all products have stock field)
     for (const orderItem of items) {
       const product = products.find(p => p._id.toString() === orderItem.productId);
       
@@ -61,24 +62,43 @@ const createOrder = async (req, res) => {
         });
       }
 
-      if (product.price !== orderItem.price) {
+      // Price validation (allow some tolerance for currency conversion)
+      if (Math.abs(product.price - orderItem.price) > 1) {
         return res.status(400).json({
           success: false,
           message: `Price mismatch for ${product.name}. Current price: Rs.${product.price}`
         });
       }
 
-      if (product.stock < orderItem.quantity) {
+      // Stock validation (only if product has stock field)
+      if (product.quantity !== undefined && product.quantity < orderItem.quantity) {
         return res.status(400).json({
           success: false,
-          message: `Insufficient stock for ${product.name}. Available: ${product.stock}`
+          message: `Insufficient stock for ${product.name}. Available: ${product.quantity}`
         });
       }
     }
 
+    // Prepare customer data with user ID if authenticated
+    const customerData = {
+      name: customer.name,
+      email: customer.email.toLowerCase(),
+      phone: customer.phone,
+      address: customer.address
+    };
+
+    // If user is authenticated via JWT token, add userId to customer data
+    if (req.user && req.user._id) {
+      customerData.userId = req.user._id;
+    }
+    // If userId is provided in customer data (from frontend), use it
+    else if (customer.userId) {
+      customerData.userId = customer.userId;
+    }
+
     // Create order
     const order = new Order({
-      customer,
+      customer: customerData,
       items: items.map(item => ({
         productId: item.productId,
         name: item.name,
@@ -109,12 +129,15 @@ const createOrder = async (req, res) => {
     
     await order.save();
 
-    // Update product stock
+    // Update product stock only if product has quantity field
     for (const orderItem of items) {
-      await Product.findByIdAndUpdate(
-        orderItem.productId,
-        { $inc: { stock: -orderItem.quantity } }
-      );
+      const product = products.find(p => p._id.toString() === orderItem.productId);
+      if (product && product.quantity !== undefined) {
+        await Product.findByIdAndUpdate(
+          orderItem.productId,
+          { $inc: { quantity: -orderItem.quantity } }
+        );
+      }
     }
 
     // Send order confirmation email
@@ -223,6 +246,14 @@ const getOrdersByUserId = async (req, res) => {
   try {
     const { userId } = req.params;
 
+    // Verify that the requesting user is accessing their own orders (if authenticated)
+    if (req.user && req.user._id.toString() !== userId) {
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied. You can only access your own orders.'
+      });
+    }
+
     // Find orders where customer.userId matches
     const orders = await Order.find({ 'customer.userId': userId })
       .populate('items.productId', 'name images sku')
@@ -282,11 +313,50 @@ const getOrdersByEmail = async (req, res) => {
   }
 };
 
+// @desc    Get current user's orders
+// @route   GET /api/orders/my-orders
+// @access  Private (User)
+const getMyOrders = async (req, res) => {
+  try {
+    if (!req.user || !req.user._id) {
+      return res.status(401).json({
+        success: false,
+        message: 'Authentication required'
+      });
+    }
+
+    // Find orders for the authenticated user
+    const orders = await Order.find({ 'customer.userId': req.user._id })
+      .populate('items.productId', 'name images sku')
+      .sort({ createdAt: -1 });
+
+    // Remove sensitive admin information
+    const orderData = orders.map(order => {
+      const data = order.toObject();
+      delete data.notes?.admin;
+      return data;
+    });
+
+    res.status(200).json({
+      success: true,
+      data: orderData
+    });
+
+  } catch (error) {
+    console.error('Get my orders error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error'
+    });
+  }
+};
+
 // Routes
-router.post('/', createOrder);
+router.post('/', optionalAuth, createOrder);  // Optional auth to allow both logged-in and guest orders
+router.get('/my-orders', authenticate, getMyOrders);  // Protected route for authenticated users
 router.get('/:orderNumber', getOrderByNumber);
 router.get('/:orderNumber/tracking', getOrderTracking);
-router.get('/user/:userId', getOrdersByUserId);
-router.get('/by-email/:email', getOrdersByEmail);
+router.get('/user/:userId', authenticate, getOrdersByUserId);  // Protected route
+router.get('/by-email/:email', getOrdersByEmail);  // Public route for email-based lookup
 
 module.exports = router; 
