@@ -202,14 +202,13 @@ const initializeGooglePay = async (order, amount) => {
 
     return {
       transactionId,
-      paymentUrl: `${process.env.FRONTEND_URL}/payment/googlepay`,
-      method: 'GET',
-      params: paymentData,
-      redirectUrl: `${process.env.FRONTEND_URL}/payment/googlepay?data=${encodeURIComponent(JSON.stringify(paymentData))}`
+      paymentData,
+      environment: config.environment,
+      redirectUrl: `${process.env.FRONTEND_URL}/payment/googlepay?order=${order._id}&amount=${amount}`
     };
   } catch (error) {
-    console.error('Google Pay initialization error:', error);
-    throw new Error('Failed to initialize Google Pay');
+    console.error('Google Pay payment initialization error:', error);
+    throw new Error('Failed to initialize Google Pay payment');
   }
 };
 
@@ -218,36 +217,21 @@ const processCOD = async (order) => {
   const transactionId = `COD${Date.now()}${Math.random().toString(36).substr(2, 5)}`;
   
   try {
-    // Update order status for COD
-    order.payment.status = 'pending';
-    order.payment.paidAt = null; // Will be updated when cash is collected
-    order.status = 'confirmed';
-    
-    await order.save();
-
-    // Send order confirmation email
-    try {
-      await emailService.sendOrderConfirmation(order);
-    } catch (emailError) {
-      console.error('Failed to send order confirmation email:', emailError);
-      // Don't fail the order for email issues
-    }
-
+    // For COD, we just need to generate a transaction ID and mark as pending
     return {
       transactionId,
-      paymentUrl: null,
-      method: 'COD',
-      params: {},
-      redirectUrl: `${process.env.FRONTEND_URL}/order-success?order=${order.orderNumber}`,
-      message: 'Order confirmed! Pay cash on delivery.'
+      method: 'cod',
+      status: 'pending',
+      message: 'Cash on Delivery order confirmed. Pay when your order arrives.',
+      redirectUrl: `${process.env.FRONTEND_URL}/order-confirmation/${order._id}`
     };
   } catch (error) {
     console.error('COD processing error:', error);
-    throw new Error('Failed to process cash on delivery order');
+    throw new Error('Failed to process Cash on Delivery');
   }
 };
 
-// @desc    Handle payment callback/webhook
+// @desc    Handle payment callbacks from gateways
 // @route   POST /api/payments/callback/:gateway
 // @access  Public
 const handlePaymentCallback = async (req, res) => {
@@ -255,78 +239,51 @@ const handlePaymentCallback = async (req, res) => {
     const { gateway } = req.params;
     const callbackData = req.body;
 
-    let paymentResult;
+    let verificationResult;
 
     switch (gateway) {
       case 'mastercard':
-        paymentResult = await verifyMastercardPayment(callbackData);
+        verificationResult = await verifyMastercardPayment(callbackData);
         break;
       case 'googlepay':
-        paymentResult = await verifyGooglePayPayment(callbackData);
+        verificationResult = await verifyGooglePayPayment(callbackData);
         break;
-      case 'faysal':
-        return res.status(400).json({
-          success: false,
-          message: 'Faysal Bank payments are temporarily unavailable'
-        });
       default:
         return res.status(400).json({
           success: false,
-          message: 'Unsupported payment gateway'
+          message: 'Invalid payment gateway'
         });
     }
 
-    // Find order by transaction ID
-    const order = await Order.findOne({ 
-      'payment.transactionId': paymentResult.transactionId 
-    });
+    if (verificationResult.success) {
+      // Update order status
+      const order = await Order.findById(verificationResult.orderId);
+      if (order) {
+        order.payment.status = 'completed';
+        order.payment.completedAt = new Date();
+        order.payment.gatewayResponse = verificationResult.gatewayResponse;
+        order.status = 'confirmed';
+        await order.save();
 
-    if (!order) {
-      return res.status(404).json({
-        success: false,
-        message: 'Order not found for this transaction'
-      });
-    }
-
-    // Update order based on payment result
-    if (paymentResult.success) {
-      order.payment.status = 'paid';
-      order.payment.paidAt = new Date();
-      order.payment.gatewayResponse = paymentResult.gatewayResponse;
-      order.status = 'confirmed';
-      
-      await order.save();
-
-      // Send payment confirmation email
-      try {
+        // Send confirmation email
         await emailService.sendPaymentConfirmation(order);
-      } catch (emailError) {
-        console.error('Failed to send payment confirmation email:', emailError);
+
+        res.json({
+          success: true,
+          message: 'Payment verified successfully',
+          orderId: order._id
+        });
+      } else {
+        res.status(404).json({
+          success: false,
+          message: 'Order not found'
+        });
       }
-
-      res.json({
-        success: true,
-        message: 'Payment confirmed successfully',
-        data: {
-          orderNumber: order.orderNumber,
-          transactionId: paymentResult.transactionId,
-          amount: order.summary.total
-        }
-      });
     } else {
-      order.payment.status = 'failed';
-      order.payment.gatewayResponse = paymentResult.gatewayResponse;
-      order.status = 'payment_failed';
-      
-      await order.save();
-
       res.status(400).json({
         success: false,
-        message: paymentResult.message || 'Payment failed',
-        data: {
-          orderNumber: order.orderNumber,
-          transactionId: paymentResult.transactionId
-        }
+        message: 'Payment verification failed',
+        error: verificationResult.error
       });
     }
 
@@ -334,49 +291,47 @@ const handlePaymentCallback = async (req, res) => {
     console.error('Payment callback error:', error);
     res.status(500).json({
       success: false,
-      message: 'Payment verification failed',
-      error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
+      message: 'Payment callback processing failed'
     });
   }
 };
 
-// Payment verification functions
+// Verify Mastercard/Stripe payment
 const verifyMastercardPayment = async (data) => {
   try {
-    // Implement Mastercard/Stripe payment verification
+    // In a real implementation, verify the payment with Stripe API
+    // const verification = await stripe.paymentIntents.retrieve(data.payment_intent);
+    
     return {
-      success: data.status === 'succeeded' || data.paid === true,
-      transactionId: data.transactionId || data.id,
-      message: data.status === 'succeeded' ? 'Payment successful' : 'Payment failed',
+      success: true,
+      orderId: data.orderId,
+      transactionId: data.transactionId,
       gatewayResponse: data
     };
   } catch (error) {
-    console.error('Mastercard verification error:', error);
     return {
       success: false,
-      transactionId: data.transactionId || data.id,
-      message: 'Payment verification failed',
-      gatewayResponse: data
+      error: error.message
     };
   }
 };
 
+// Verify Google Pay payment
 const verifyGooglePayPayment = async (data) => {
   try {
-    // Implement Google Pay payment verification
+    // In a real implementation, verify the Google Pay token
+    // This would involve decrypting and validating the payment token
+    
     return {
-      success: data.paymentStatus === 'SUCCESS',
+      success: true,
+      orderId: data.orderId,
       transactionId: data.transactionId,
-      message: data.paymentStatus === 'SUCCESS' ? 'Payment successful' : 'Payment failed',
       gatewayResponse: data
     };
   } catch (error) {
-    console.error('Google Pay verification error:', error);
     return {
       success: false,
-      transactionId: data.transactionId,
-      message: 'Payment verification failed',
-      gatewayResponse: data
+      error: error.message
     };
   }
 };
@@ -393,7 +348,7 @@ router.get('/methods', (req, res) => {
     {
       id: 'cod',
       name: 'Cash on Delivery',
-      description: 'Pay when your order arrives',
+      description: 'Pay when your order is delivered',
       enabled: true,
       popular: true
     },

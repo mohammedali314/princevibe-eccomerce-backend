@@ -2,405 +2,330 @@ const nodemailer = require('nodemailer');
 
 class EmailService {
   constructor() {
-    this.transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST || 'smtp.gmail.com',
-      port: parseInt(process.env.SMTP_PORT) || 587,
-      secure: process.env.SMTP_SECURE === 'true',
-      auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS
-      }
-    });
+    this.transporter = null;
+    this.isConnected = false;
+    this.init();
   }
 
-  // Verify email connection
+  async init() {
+    try {
+      // Create transporter based on environment
+      if (process.env.EMAIL_SERVICE === 'gmail') {
+        this.transporter = nodemailer.createTransporter({
+          service: 'gmail',
+          auth: {
+            user: process.env.EMAIL_USER,
+            pass: process.env.EMAIL_PASSWORD
+          }
+        });
+      } else if (process.env.SMTP_HOST) {
+        // SMTP configuration
+        this.transporter = nodemailer.createTransporter({
+          host: process.env.SMTP_HOST,
+          port: process.env.SMTP_PORT || 587,
+          secure: process.env.SMTP_SECURE === 'true',
+          auth: {
+            user: process.env.SMTP_USER,
+            pass: process.env.SMTP_PASSWORD
+          }
+        });
+      } else {
+        // Development mode - use Ethereal Email (test account)
+        const testAccount = await nodemailer.createTestAccount();
+        this.transporter = nodemailer.createTransporter({
+          host: 'smtp.ethereal.email',
+          port: 587,
+          secure: false,
+          auth: {
+            user: testAccount.user,
+            pass: testAccount.pass
+          }
+        });
+        console.log('📧 Using Ethereal Email for development');
+      }
+
+      this.isConnected = true;
+    } catch (error) {
+      console.error('❌ Email service initialization failed:', error.message);
+      this.isConnected = false;
+    }
+  }
+
   async verifyConnection() {
     try {
-      await this.transporter.verify();
-      console.log('📧 Email service connected successfully');
-      return true;
+      if (!this.transporter) {
+        await this.init();
+      }
+      
+      if (this.transporter) {
+        await this.transporter.verify();
+        this.isConnected = true;
+        console.log('✅ Email service connected successfully');
+        return true;
+      }
     } catch (error) {
       console.error('❌ Email service connection failed:', error.message);
+      this.isConnected = false;
+    }
+    return false;
+  }
+
+  async sendEmail(options) {
+    try {
+      if (!this.isConnected) {
+        console.warn('⚠️ Email service not connected, email not sent');
+        return false;
+      }
+
+      const mailOptions = {
+        from: process.env.FROM_EMAIL || 'noreply@princevibe.com',
+        to: options.to,
+        subject: options.subject,
+        html: options.html || options.text,
+        text: options.text
+      };
+
+      const info = await this.transporter.sendMail(mailOptions);
+      console.log('📧 Email sent successfully:', info.messageId);
+      
+      // Log preview URL for development
+      if (process.env.NODE_ENV === 'development') {
+        console.log('📧 Preview URL:', nodemailer.getTestMessageUrl(info));
+      }
+      
+      return true;
+    } catch (error) {
+      console.error('❌ Failed to send email:', error.message);
       return false;
     }
   }
 
-  // Send order confirmation email
   async sendOrderConfirmation(order) {
     try {
-      const subject = `Order Confirmation - ${order.orderNumber}`;
-      const html = this.generateOrderConfirmationHTML(order);
+      const emailContent = this.generateOrderConfirmationEmail(order);
       
-      const mailOptions = {
-        from: process.env.EMAIL_FROM || 'Prince Vibe <noreply@princevibe.com>',
-        to: order.customer.email,
-        subject: subject,
-        html: html
-      };
-
-      const result = await this.transporter.sendMail(mailOptions);
-      console.log(`📧 Order confirmation sent to ${order.customer.email}`);
-      return { success: true, messageId: result.messageId };
-      
+      return await this.sendEmail({
+        to: order.customer?.email || order.email,
+        subject: `Order Confirmation - ${order.orderNumber || order._id}`,
+        html: emailContent
+      });
     } catch (error) {
-      console.error('❌ Failed to send order confirmation:', error.message);
-      return { success: false, error: error.message };
+      console.error('❌ Failed to send order confirmation email:', error.message);
+      return false;
     }
   }
 
-  // Send payment confirmation email
   async sendPaymentConfirmation(order) {
     try {
-      const subject = `Payment Received - ${order.orderNumber}`;
-      const html = this.generatePaymentConfirmationHTML(order);
+      const emailContent = this.generatePaymentConfirmationEmail(order);
       
-      const mailOptions = {
-        from: process.env.EMAIL_FROM || 'Prince Vibe <noreply@princevibe.com>',
-        to: order.customer.email,
-        subject: subject,
-        html: html
-      };
-
-      const result = await this.transporter.sendMail(mailOptions);
-      console.log(`📧 Payment confirmation sent to ${order.customer.email}`);
-      return { success: true, messageId: result.messageId };
-      
+      return await this.sendEmail({
+        to: order.customer?.email || order.email,
+        subject: `Payment Confirmed - ${order.orderNumber || order._id}`,
+        html: emailContent
+      });
     } catch (error) {
-      console.error('❌ Failed to send payment confirmation:', error.message);
-      return { success: false, error: error.message };
+      console.error('❌ Failed to send payment confirmation email:', error.message);
+      return false;
     }
   }
 
-  // Send shipping notification email
   async sendShippingNotification(order) {
     try {
-      const subject = `Your Order is on the Way - ${order.orderNumber}`;
-      const html = this.generateShippingNotificationHTML(order);
+      const emailContent = this.generateShippingNotificationEmail(order);
       
-      const mailOptions = {
-        from: process.env.EMAIL_FROM || 'Prince Vibe <noreply@princevibe.com>',
-        to: order.customer.email,
-        subject: subject,
-        html: html
-      };
-
-      const result = await this.transporter.sendMail(mailOptions);
-      console.log(`📧 Shipping notification sent to ${order.customer.email}`);
-      return { success: true, messageId: result.messageId };
-      
+      return await this.sendEmail({
+        to: order.customer?.email || order.email,
+        subject: `Order Shipped - ${order.orderNumber || order._id}`,
+        html: emailContent
+      });
     } catch (error) {
-      console.error('❌ Failed to send shipping notification:', error.message);
-      return { success: false, error: error.message };
+      console.error('❌ Failed to send shipping notification email:', error.message);
+      return false;
     }
   }
 
-  // Send order status update email
   async sendOrderStatusUpdate(order, previousStatus) {
     try {
-      const subject = `Order Update - ${order.orderNumber}`;
-      const html = this.generateOrderStatusUpdateHTML(order, previousStatus);
+      const emailContent = this.generateOrderStatusUpdateEmail(order, previousStatus);
       
-      const mailOptions = {
-        from: process.env.EMAIL_FROM || 'Prince Vibe <noreply@princevibe.com>',
-        to: order.customer.email,
-        subject: subject,
-        html: html
-      };
-
-      const result = await this.transporter.sendMail(mailOptions);
-      console.log(`📧 Order status update sent to ${order.customer.email}`);
-      return { success: true, messageId: result.messageId };
-      
+      return await this.sendEmail({
+        to: order.customer?.email || order.email,
+        subject: `Order Status Update - ${order.orderNumber || order._id}`,
+        html: emailContent
+      });
     } catch (error) {
-      console.error('❌ Failed to send order status update:', error.message);
-      return { success: false, error: error.message };
+      console.error('❌ Failed to send order status update email:', error.message);
+      return false;
     }
   }
 
-  // Generate order confirmation HTML
-  generateOrderConfirmationHTML(order) {
-    const itemsHTML = order.items.map(item => `
+  generateOrderConfirmationEmail(order) {
+    const items = order.items?.map(item => `
       <tr>
-        <td style="padding: 15px; border-bottom: 1px solid #e5e5e5;">
-          <img src="${item.image}" alt="${item.name}" style="width: 60px; height: 60px; object-fit: cover; border-radius: 4px;">
+        <td style="padding: 10px; border-bottom: 1px solid #eee;">
+          ${item.name || item.productName}
         </td>
-        <td style="padding: 15px; border-bottom: 1px solid #e5e5e5;">
-          <h4 style="margin: 0; font-size: 16px; color: #000;">${item.name}</h4>
-          <p style="margin: 5px 0 0 0; color: #666; font-size: 14px;">Qty: ${item.quantity}</p>
+        <td style="padding: 10px; border-bottom: 1px solid #eee; text-align: center;">
+          ${item.quantity}
         </td>
-        <td style="padding: 15px; border-bottom: 1px solid #e5e5e5; text-align: right; font-weight: 600;">
-          Rs. ${(item.price * item.quantity).toLocaleString()}
+        <td style="padding: 10px; border-bottom: 1px solid #eee; text-align: right;">
+          PKR ${(item.price * item.quantity).toLocaleString()}
         </td>
       </tr>
-    `).join('');
+    `).join('') || '';
 
     return `
       <!DOCTYPE html>
       <html>
       <head>
         <meta charset="utf-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>Order Confirmation</title>
       </head>
-      <body style="margin: 0; padding: 0; font-family: Arial, sans-serif; background-color: #f5f5f5;">
-        <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff;">
-          <!-- Header -->
-          <div style="background-color: #000000; color: #ffffff; padding: 40px 30px; text-align: center;">
-            <h1 style="margin: 0; font-size: 32px; font-weight: 300; letter-spacing: 2px;">PRINCE VIBE</h1>
-            <p style="margin: 10px 0 0 0; font-size: 14px; opacity: 0.9;">LUXURY TIMEPIECES</p>
+      <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
+        <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
+          <h2 style="color: #2c3e50;">Order Confirmation</h2>
+          
+          <p>Dear ${order.customer?.name || 'Customer'},</p>
+          
+          <p>Thank you for your order! We've received your order and are processing it.</p>
+          
+          <div style="background: #f8f9fa; padding: 15px; margin: 20px 0; border-radius: 5px;">
+            <h3>Order Details</h3>
+            <p><strong>Order Number:</strong> ${order.orderNumber || order._id}</p>
+            <p><strong>Order Date:</strong> ${new Date(order.createdAt || Date.now()).toLocaleDateString()}</p>
+            <p><strong>Total Amount:</strong> PKR ${(order.total || order.summary?.total || 0).toLocaleString()}</p>
           </div>
-
-          <!-- Content -->
-          <div style="padding: 40px 30px;">
-            <h2 style="margin: 0 0 20px 0; color: #000; font-size: 24px;">Order Confirmation</h2>
-            <p style="margin: 0 0 30px 0; color: #666; line-height: 1.6;">
-              Dear ${order.customer.name},<br><br>
-              Thank you for your order! We've received your order and will begin processing it soon.
-            </p>
-
-            <!-- Order Info -->
-            <div style="background-color: #f9f9f9; padding: 20px; margin-bottom: 30px; border-left: 4px solid #000;">
-              <h3 style="margin: 0 0 15px 0; color: #000;">Order Details</h3>
-              <p style="margin: 5px 0; color: #666;"><strong>Order Number:</strong> ${order.orderNumber}</p>
-              <p style="margin: 5px 0; color: #666;"><strong>Order Date:</strong> ${new Date(order.createdAt).toLocaleDateString()}</p>
-              <p style="margin: 5px 0; color: #666;"><strong>Payment Method:</strong> ${this.getPaymentMethodName(order.payment.method)}</p>
-              <p style="margin: 5px 0; color: #666;"><strong>Total Amount:</strong> Rs. ${order.summary.total.toLocaleString()}</p>
-            </div>
-
-            <!-- Items -->
-            <h3 style="margin: 0 0 20px 0; color: #000;">Order Items</h3>
-            <table style="width: 100%; border-collapse: collapse; margin-bottom: 30px;">
-              ${itemsHTML}
-              <tr>
-                <td colspan="2" style="padding: 15px; text-align: right; font-weight: 600; border-top: 2px solid #000;">
-                  Total: Rs. ${order.summary.total.toLocaleString()}
-                </td>
+          
+          ${items ? `
+          <h3>Order Items</h3>
+          <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
+            <thead>
+              <tr style="background: #f1f1f1;">
+                <th style="padding: 10px; text-align: left; border-bottom: 2px solid #ddd;">Item</th>
+                <th style="padding: 10px; text-align: center; border-bottom: 2px solid #ddd;">Quantity</th>
+                <th style="padding: 10px; text-align: right; border-bottom: 2px solid #ddd;">Total</th>
               </tr>
-            </table>
-
-            <!-- Shipping Address -->
-            <h3 style="margin: 0 0 15px 0; color: #000;">Shipping Address</h3>
-            <div style="background-color: #f9f9f9; padding: 20px; margin-bottom: 30px;">
-              <p style="margin: 0; color: #666; line-height: 1.6;">
-                ${order.customer.name}<br>
-                ${order.customer.address.street}<br>
-                ${order.customer.address.city}, ${order.customer.address.state} ${order.customer.address.zipCode}<br>
-                ${order.customer.address.country}<br>
-                Phone: ${order.customer.phone}
-              </p>
-            </div>
-
-            <!-- Next Steps -->
-            <div style="background-color: #000; color: #fff; padding: 20px; text-align: center;">
-              <h3 style="margin: 0 0 15px 0;">What's Next?</h3>
-              <p style="margin: 0; line-height: 1.6;">
-                We'll send you another email when your order ships. You can track your order status online.
-              </p>
-            </div>
-          </div>
-
-          <!-- Footer -->
-          <div style="background-color: #f9f9f9; padding: 30px; text-align: center; color: #666; font-size: 14px;">
-            <p style="margin: 0 0 10px 0;">Thank you for choosing Prince Vibe</p>
-            <p style="margin: 0;">If you have any questions, contact us at admin@princevibe.com</p>
-          </div>
+            </thead>
+            <tbody>
+              ${items}
+            </tbody>
+          </table>
+          ` : ''}
+          
+          <p>We'll send you another email when your order ships.</p>
+          
+          <p>Best regards,<br>Prince Vibe Team</p>
         </div>
       </body>
       </html>
     `;
   }
 
-  // Generate payment confirmation HTML
-  generatePaymentConfirmationHTML(order) {
+  generatePaymentConfirmationEmail(order) {
     return `
       <!DOCTYPE html>
       <html>
       <head>
         <meta charset="utf-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>Payment Confirmation</title>
       </head>
-      <body style="margin: 0; padding: 0; font-family: Arial, sans-serif; background-color: #f5f5f5;">
-        <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff;">
-          <!-- Header -->
-          <div style="background-color: #000000; color: #ffffff; padding: 40px 30px; text-align: center;">
-            <h1 style="margin: 0; font-size: 32px; font-weight: 300; letter-spacing: 2px;">PRINCE VIBE</h1>
-            <p style="margin: 10px 0 0 0; font-size: 14px; opacity: 0.9;">PAYMENT CONFIRMED</p>
+      <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
+        <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
+          <h2 style="color: #27ae60;">Payment Confirmed</h2>
+          
+          <p>Dear ${order.customer?.name || 'Customer'},</p>
+          
+          <p>Your payment has been successfully processed!</p>
+          
+          <div style="background: #d4edda; padding: 15px; margin: 20px 0; border-radius: 5px; border-left: 4px solid #27ae60;">
+            <h3>Payment Details</h3>
+            <p><strong>Order Number:</strong> ${order.orderNumber || order._id}</p>
+            <p><strong>Payment Amount:</strong> PKR ${(order.payment?.amount || order.total || 0).toLocaleString()}</p>
+            <p><strong>Payment Method:</strong> ${order.payment?.method || 'N/A'}</p>
+            <p><strong>Transaction Date:</strong> ${new Date().toLocaleDateString()}</p>
           </div>
-
-          <!-- Content -->
-          <div style="padding: 40px 30px;">
-            <div style="text-align: center; margin-bottom: 30px;">
-              <div style="width: 80px; height: 80px; background-color: #22c55e; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; margin-bottom: 20px;">
-                <span style="color: white; font-size: 40px;">✓</span>
-              </div>
-              <h2 style="margin: 0; color: #000; font-size: 24px;">Payment Received!</h2>
-              <p style="margin: 10px 0 0 0; color: #666;">Your payment has been successfully processed.</p>
-            </div>
-
-            <!-- Payment Details -->
-            <div style="background-color: #f9f9f9; padding: 20px; margin-bottom: 30px;">
-              <h3 style="margin: 0 0 15px 0; color: #000;">Payment Details</h3>
-              <p style="margin: 5px 0; color: #666;"><strong>Order Number:</strong> ${order.orderNumber}</p>
-              <p style="margin: 5px 0; color: #666;"><strong>Transaction ID:</strong> ${order.payment.transactionId}</p>
-              <p style="margin: 5px 0; color: #666;"><strong>Amount Paid:</strong> Rs. ${order.summary.total.toLocaleString()}</p>
-              <p style="margin: 5px 0; color: #666;"><strong>Payment Method:</strong> ${this.getPaymentMethodName(order.payment.method)}</p>
-              <p style="margin: 5px 0; color: #666;"><strong>Payment Date:</strong> ${new Date(order.payment.paidAt).toLocaleDateString()}</p>
-            </div>
-
-            <div style="text-align: center; background-color: #000; color: #fff; padding: 20px;">
-              <p style="margin: 0; line-height: 1.6;">
-                Your order is now being prepared for shipment. We'll notify you when it's on the way!
-              </p>
-            </div>
-          </div>
-
-          <!-- Footer -->
-          <div style="background-color: #f9f9f9; padding: 30px; text-align: center; color: #666; font-size: 14px;">
-            <p style="margin: 0 0 10px 0;">Thank you for your business!</p>
-            <p style="margin: 0;">Questions? Contact us at admin@princevibe.com</p>
-          </div>
+          
+          <p>Your order is now being processed and will be shipped soon.</p>
+          
+          <p>Best regards,<br>Prince Vibe Team</p>
         </div>
       </body>
       </html>
     `;
   }
 
-  // Generate shipping notification HTML
-  generateShippingNotificationHTML(order) {
+  generateShippingNotificationEmail(order) {
     return `
       <!DOCTYPE html>
       <html>
       <head>
         <meta charset="utf-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>Order Shipped</title>
       </head>
-      <body style="margin: 0; padding: 0; font-family: Arial, sans-serif; background-color: #f5f5f5;">
-        <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff;">
-          <!-- Header -->
-          <div style="background-color: #000000; color: #ffffff; padding: 40px 30px; text-align: center;">
-            <h1 style="margin: 0; font-size: 32px; font-weight: 300; letter-spacing: 2px;">PRINCE VIBE</h1>
-            <p style="margin: 10px 0 0 0; font-size: 14px; opacity: 0.9;">ORDER SHIPPED</p>
+      <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
+        <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
+          <h2 style="color: #3498db;">Your Order Has Shipped!</h2>
+          
+          <p>Dear ${order.customer?.name || 'Customer'},</p>
+          
+          <p>Great news! Your order has been shipped and is on its way to you.</p>
+          
+          <div style="background: #e3f2fd; padding: 15px; margin: 20px 0; border-radius: 5px; border-left: 4px solid #3498db;">
+            <h3>Shipping Details</h3>
+            <p><strong>Order Number:</strong> ${order.orderNumber || order._id}</p>
+            ${order.trackingNumber ? `<p><strong>Tracking Number:</strong> ${order.trackingNumber}</p>` : ''}
+            <p><strong>Shipping Address:</strong><br>
+            ${order.customer?.address?.street || ''}<br>
+            ${order.customer?.address?.city || ''}, ${order.customer?.address?.state || ''}<br>
+            ${order.customer?.address?.zipCode || ''}</p>
+            ${order.estimatedDelivery ? `<p><strong>Estimated Delivery:</strong> ${new Date(order.estimatedDelivery).toLocaleDateString()}</p>` : ''}
           </div>
-
-          <!-- Content -->
-          <div style="padding: 40px 30px;">
-            <div style="text-align: center; margin-bottom: 30px;">
-              <div style="width: 80px; height: 80px; background-color: #3b82f6; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; margin-bottom: 20px;">
-                <span style="color: white; font-size: 30px;">📦</span>
-              </div>
-              <h2 style="margin: 0; color: #000; font-size: 24px;">Your Order is on the Way!</h2>
-              <p style="margin: 10px 0 0 0; color: #666;">Order ${order.orderNumber} has been shipped.</p>
-            </div>
-
-            <!-- Tracking Info -->
-            <div style="background-color: #f9f9f9; padding: 20px; margin-bottom: 30px;">
-              <h3 style="margin: 0 0 15px 0; color: #000;">Shipping Details</h3>
-              <p style="margin: 5px 0; color: #666;"><strong>Order Number:</strong> ${order.orderNumber}</p>
-              ${order.shipping.trackingNumber ? `<p style="margin: 5px 0; color: #666;"><strong>Tracking Number:</strong> ${order.shipping.trackingNumber}</p>` : ''}
-              <p style="margin: 5px 0; color: #666;"><strong>Shipped Date:</strong> ${new Date(order.shipping.shippedAt).toLocaleDateString()}</p>
-              <p style="margin: 5px 0; color: #666;"><strong>Estimated Delivery:</strong> ${order.shipping.estimatedDelivery ? new Date(order.shipping.estimatedDelivery).toLocaleDateString() : '3-5 business days'}</p>
-            </div>
-
-            <div style="text-align: center; background-color: #000; color: #fff; padding: 20px;">
-              <p style="margin: 0 0 15px 0; line-height: 1.6;">
-                Your package is on its way! You'll receive an email confirmation when it's delivered.
-              </p>
-              ${order.shipping.trackingNumber ? `<p style="margin: 0; font-size: 14px; opacity: 0.9;">Track your package using the tracking number above.</p>` : ''}
-            </div>
-          </div>
-
-          <!-- Footer -->
-          <div style="background-color: #f9f9f9; padding: 30px; text-align: center; color: #666; font-size: 14px;">
-            <p style="margin: 0 0 10px 0;">Thanks for shopping with Prince Vibe!</p>
-            <p style="margin: 0;">Need help? Contact us at admin@princevibe.com</p>
-          </div>
+          
+          <p>You can track your package using the tracking number provided above.</p>
+          
+          <p>Best regards,<br>Prince Vibe Team</p>
         </div>
       </body>
       </html>
     `;
   }
 
-  // Generate order status update HTML
-  generateOrderStatusUpdateHTML(order, previousStatus) {
-    const statusMessages = {
-      confirmed: 'Your order has been confirmed and is being prepared.',
-      processing: 'Your order is currently being processed.',
-      shipped: 'Your order has been shipped and is on the way!',
-      delivered: 'Your order has been successfully delivered.',
-      cancelled: 'Your order has been cancelled.',
-      returned: 'Your return has been processed.'
-    };
-
+  generateOrderStatusUpdateEmail(order, previousStatus) {
     return `
       <!DOCTYPE html>
       <html>
       <head>
         <meta charset="utf-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>Order Status Update</title>
       </head>
-      <body style="margin: 0; padding: 0; font-family: Arial, sans-serif; background-color: #f5f5f5;">
-        <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff;">
-          <!-- Header -->
-          <div style="background-color: #000000; color: #ffffff; padding: 40px 30px; text-align: center;">
-            <h1 style="margin: 0; font-size: 32px; font-weight: 300; letter-spacing: 2px;">PRINCE VIBE</h1>
-            <p style="margin: 10px 0 0 0; font-size: 14px; opacity: 0.9;">ORDER UPDATE</p>
+      <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
+        <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
+          <h2 style="color: #9b59b6;">Order Status Update</h2>
+          
+          <p>Dear ${order.customer?.name || 'Customer'},</p>
+          
+          <p>Your order status has been updated.</p>
+          
+          <div style="background: #f8f9fa; padding: 15px; margin: 20px 0; border-radius: 5px;">
+            <h3>Status Update</h3>
+            <p><strong>Order Number:</strong> ${order.orderNumber || order._id}</p>
+            <p><strong>Previous Status:</strong> ${previousStatus || 'N/A'}</p>
+            <p><strong>Current Status:</strong> ${order.status || 'N/A'}</p>
+            <p><strong>Updated On:</strong> ${new Date().toLocaleDateString()}</p>
           </div>
-
-          <!-- Content -->
-          <div style="padding: 40px 30px;">
-            <h2 style="margin: 0 0 20px 0; color: #000; font-size: 24px;">Order Status Update</h2>
-            <p style="margin: 0 0 30px 0; color: #666; line-height: 1.6;">
-              Dear ${order.customer.name},<br><br>
-              Your order status has been updated.
-            </p>
-
-            <!-- Status Update -->
-            <div style="background-color: #f9f9f9; padding: 20px; margin-bottom: 30px; border-left: 4px solid #000;">
-              <h3 style="margin: 0 0 15px 0; color: #000;">Current Status: ${order.status.toUpperCase()}</h3>
-              <p style="margin: 0; color: #666; line-height: 1.6;">
-                ${statusMessages[order.status] || 'Your order status has been updated.'}
-              </p>
-            </div>
-
-            <!-- Order Details -->
-            <div style="background-color: #f9f9f9; padding: 20px; margin-bottom: 30px;">
-              <h3 style="margin: 0 0 15px 0; color: #000;">Order Details</h3>
-              <p style="margin: 5px 0; color: #666;"><strong>Order Number:</strong> ${order.orderNumber}</p>
-              <p style="margin: 5px 0; color: #666;"><strong>Order Date:</strong> ${new Date(order.createdAt).toLocaleDateString()}</p>
-              <p style="margin: 5px 0; color: #666;"><strong>Total Amount:</strong> Rs. ${order.summary.total.toLocaleString()}</p>
-            </div>
-
-            <div style="text-align: center; background-color: #000; color: #fff; padding: 20px;">
-              <p style="margin: 0; line-height: 1.6;">
-                Thank you for your patience. We'll keep you updated on any further changes.
-              </p>
-            </div>
-          </div>
-
-          <!-- Footer -->
-          <div style="background-color: #f9f9f9; padding: 30px; text-align: center; color: #666; font-size: 14px;">
-            <p style="margin: 0 0 10px 0;">Thank you for choosing Prince Vibe</p>
-            <p style="margin: 0;">Questions? Contact us at admin@princevibe.com</p>
-          </div>
+          
+          <p>Thank you for shopping with us!</p>
+          
+          <p>Best regards,<br>Prince Vibe Team</p>
         </div>
       </body>
       </html>
     `;
-  }
-
-  // Helper method to get payment method display name
-  getPaymentMethodName(method) {
-    const methods = {
-      'cod': 'Cash on Delivery',
-      'mastercard': 'Mastercard',
-      'googlepay': 'Google Pay',
-      'faysal': 'Faysal Bank (Temporarily Unavailable)'
-    };
-    return methods[method] || method;
   }
 }
 
-module.exports = new EmailService(); 
+// Create and export a singleton instance
+const emailService = new EmailService();
+
+module.exports = emailService; 

@@ -10,6 +10,11 @@ const orderSchema = new mongoose.Schema({
     }
   },
   customer: {
+    userId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      required: false // Optional for guest orders
+    },
     name: {
       type: String,
       required: true,

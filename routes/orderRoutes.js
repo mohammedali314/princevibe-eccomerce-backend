@@ -5,7 +5,7 @@ const emailService = require('../utils/emailService');
 
 const router = express.Router();
 
-// @desc    Create new order (Public route for customers)
+// @desc    Create a new order
 // @route   POST /api/orders
 // @access  Public
 const createOrder = async (req, res) => {
@@ -13,39 +13,42 @@ const createOrder = async (req, res) => {
     const { customer, items, summary, payment, notes } = req.body;
 
     // Validate required fields
-    if (!customer || !items || !summary || !payment) {
+    if (!customer || !items || !Array.isArray(items) || items.length === 0) {
       return res.status(400).json({
         success: false,
-        message: 'Missing required order information'
+        message: 'Customer information and order items are required'
       });
     }
 
-    // Validate customer information
-    if (!customer.name || !customer.email || !customer.phone || !customer.address) {
+    // Validate customer data
+    if (!customer.name || !customer.email || !customer.phone) {
       return res.status(400).json({
         success: false,
-        message: 'Complete customer information is required'
+        message: 'Customer name, email, and phone are required'
+      });
+    }
+
+    // Validate address
+    if (!customer.address || !customer.address.street || !customer.address.city) {
+      return res.status(400).json({
+        success: false,
+        message: 'Complete address is required'
       });
     }
 
     // Validate items
-    if (!Array.isArray(items) || items.length === 0) {
-      return res.status(400).json({
-        success: false,
-        message: 'Order must contain at least one item'
-      });
+    for (const item of items) {
+      if (!item.productId || !item.name || !item.price || !item.quantity) {
+        return res.status(400).json({
+          success: false,
+          message: 'Each item must have productId, name, price, and quantity'
+        });
+      }
     }
 
-    // Verify products exist and prices are correct
+    // Get product details to verify prices and stock
     const productIds = items.map(item => item.productId);
     const products = await Product.find({ _id: { $in: productIds } });
-
-    if (products.length !== productIds.length) {
-      return res.status(400).json({
-        success: false,
-        message: 'One or more products not found'
-      });
-    }
 
     // Validate prices and stock
     for (const orderItem of items) {
@@ -213,9 +216,86 @@ const getOrderTracking = async (req, res) => {
   }
 };
 
+// @desc    Get orders by user ID
+// @route   GET /api/orders/user/:userId
+// @access  Private (User)
+const getOrdersByUserId = async (req, res) => {
+  try {
+    const { userId } = req.params;
+
+    // Find orders where customer.userId matches
+    const orders = await Order.find({ 'customer.userId': userId })
+      .populate('items.productId', 'name images sku')
+      .sort({ createdAt: -1 });
+
+    // Remove sensitive admin information
+    const orderData = orders.map(order => {
+      const data = order.toObject();
+      delete data.notes?.admin;
+      return data;
+    });
+
+    res.status(200).json({
+      success: true,
+      data: orderData
+    });
+
+  } catch (error) {
+    console.error('Get user orders error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error'
+    });
+  }
+};
+
+// @desc    Get orders by user email (fallback method)
+// @route   GET /api/orders/by-email/:email
+// @access  Public
+const getOrdersByEmail = async (req, res) => {
+  try {
+    const { email } = req.params;
+
+    // Find orders where customer.email matches
+    const orders = await Order.find({ 'customer.email': email.toLowerCase() })
+      .populate('items.productId', 'name images sku')
+      .sort({ createdAt: -1 });
+
+    // Remove sensitive admin information
+    const orderData = orders.map(order => {
+      const data = order.toObject();
+      delete data.notes?.admin;
+      return data;
+    });
+
+    res.status(200).json({
+      success: true,
+      data: orderData
+    });
+
+  } catch (error) {
+    console.error('Get orders by email error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error'
+    });
+  }
+};
+
 // Routes
 router.post('/', createOrder);
 router.get('/:orderNumber', getOrderByNumber);
 router.get('/:orderNumber/tracking', getOrderTracking);
+router.get('/user/:userId', getOrdersByUserId);
+router.get('/by-email/:email', getOrdersByEmail);
 
-module.exports = router; 
+module.exports = router;
+
+// Export controllers for testing
+module.exports.controllers = {
+  createOrder,
+  getOrderByNumber,
+  getOrderTracking,
+  getOrdersByUserId,
+  getOrdersByEmail
+}; 
