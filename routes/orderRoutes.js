@@ -289,13 +289,4 @@ router.get('/:orderNumber/tracking', getOrderTracking);
 router.get('/user/:userId', getOrdersByUserId);
 router.get('/by-email/:email', getOrdersByEmail);
 
-module.exports = router;
-
-// Export controllers for testing
-module.exports.controllers = {
-  createOrder,
-  getOrderByNumber,
-  getOrderTracking,
-  getOrdersByUserId,
-  getOrdersByEmail
-}; 
+module.exports = router; 

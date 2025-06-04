@@ -24,7 +24,6 @@ const adminRoutes = require('./routes/adminRoutes');
 const orderRoutes = require('./routes/orderRoutes');
 const authRoutes = require('./routes/authRoutes');
 const paymentRoutes = require('./routes/paymentRoutes');
-const userRoutes = require('./routes/userRoutes');
 const securityMiddleware = require('./middleware/security');
 const emailService = require('./utils/emailService');
 
@@ -189,7 +188,6 @@ app.use('/api/admin', adminRoutes);
 app.use('/api/orders', orderRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/payments', paymentRoutes);
-app.use('/api/users', userRoutes);
 
 // Enhanced health check route
 app.get('/api/health', (req, res) => {
