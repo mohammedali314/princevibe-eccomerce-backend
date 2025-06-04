@@ -1,5 +1,6 @@
 const Order = require('../models/Order');
 const Product = require('../models/Product');
+const emailService = require('../utils/emailService');
 
 // @desc    Get all orders with pagination and filtering
 // @route   GET /api/admin/orders
@@ -118,6 +119,8 @@ const updateOrderStatus = async (req, res) => {
       });
     }
 
+    const previousStatus = order.status;
+
     // Update order status and add timeline entry
     await order.addTimelineEntry(status, note || `Order status updated to ${status}`, req.admin.name);
 
@@ -133,6 +136,18 @@ const updateOrderStatus = async (req, res) => {
     }
 
     await order.save();
+
+    // Send appropriate email notification
+    try {
+      if (status === 'shipped') {
+        await emailService.sendShippingNotification(order);
+      } else if (status !== previousStatus) {
+        await emailService.sendOrderStatusUpdate(order, previousStatus);
+      }
+    } catch (emailError) {
+      console.error('Failed to send status update email:', emailError);
+      // Continue with order update even if email fails
+    }
 
     res.status(200).json({
       success: true,

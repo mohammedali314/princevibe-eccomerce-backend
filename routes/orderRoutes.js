@@ -1,6 +1,7 @@
 const express = require('express');
 const Order = require('../models/Order');
 const Product = require('../models/Product');
+const emailService = require('../utils/emailService');
 
 const router = express.Router();
 
@@ -111,6 +112,14 @@ const createOrder = async (req, res) => {
         orderItem.productId,
         { $inc: { stock: -orderItem.quantity } }
       );
+    }
+
+    // Send order confirmation email
+    try {
+      await emailService.sendOrderConfirmation(order);
+    } catch (emailError) {
+      console.error('Failed to send order confirmation email:', emailError);
+      // Continue with order creation even if email fails
     }
 
     // Populate product details for response
