@@ -351,12 +351,12 @@ const getMyOrders = async (req, res) => {
   }
 };
 
-// Routes
+// Routes - Order specific routes before parameterized ones
 router.post('/', optionalAuth, createOrder);  // Optional auth to allow both logged-in and guest orders
 router.get('/my-orders', authenticate, getMyOrders);  // Protected route for authenticated users
-router.get('/:orderNumber', getOrderByNumber);
-router.get('/:orderNumber/tracking', getOrderTracking);
 router.get('/user/:userId', authenticate, getOrdersByUserId);  // Protected route
 router.get('/by-email/:email', getOrdersByEmail);  // Public route for email-based lookup
+router.get('/:orderNumber/tracking', getOrderTracking);
+router.get('/:orderNumber', getOrderByNumber);
 
 module.exports = router; 
