@@ -313,6 +313,51 @@ const getOrdersByEmail = async (req, res) => {
   }
 };
 
+// @desc    Track guest order by order number and email
+// @route   POST /api/orders/track-guest
+// @access  Public
+const trackGuestOrder = async (req, res) => {
+  try {
+    const { orderNumber, email } = req.body;
+
+    if (!orderNumber || !email) {
+      return res.status(400).json({
+        success: false,
+        message: 'Order number and email are required'
+      });
+    }
+
+    // Find order by order number and customer email
+    const order = await Order.findOne({ 
+      orderNumber: orderNumber,
+      'customer.email': email.toLowerCase()
+    }).populate('items.productId', 'name images sku');
+
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: 'Order not found. Please check your order number and email address.'
+      });
+    }
+
+    // Remove sensitive admin information
+    const orderData = order.toObject();
+    delete orderData.notes?.admin;
+
+    res.status(200).json({
+      success: true,
+      data: orderData
+    });
+
+  } catch (error) {
+    console.error('Track guest order error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error'
+    });
+  }
+};
+
 // @desc    Get current user's orders
 // @route   GET /api/orders/my-orders
 // @access  Private (User)
@@ -356,6 +401,7 @@ router.post('/', optionalAuth, createOrder);  // Optional auth to allow both log
 router.get('/my-orders', authenticate, getMyOrders);  // Protected route for authenticated users
 router.get('/user/:userId', authenticate, getOrdersByUserId);  // Protected route
 router.get('/by-email/:email', getOrdersByEmail);  // Public route for email-based lookup
+router.post('/track-guest', trackGuestOrder);  // Public route for guest order tracking
 router.get('/:orderNumber/tracking', getOrderTracking);
 router.get('/:orderNumber', getOrderByNumber);
 

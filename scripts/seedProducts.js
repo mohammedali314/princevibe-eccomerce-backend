@@ -114,10 +114,10 @@ const sampleProducts = [
     ],
     badge: "New",
     inStock: true,
-    quantity: 25,
-    rating: 4.7,
+    quantity: 20,
+    rating: 4.4,
     reviews: {
-      count: 89,
+      count: 88,
       data: [
         {
           user: "Sarah M.",
@@ -373,6 +373,353 @@ const sampleProducts = [
     isFeatured: true,
     salesCount: 5,
     viewCount: 456
+  },
+
+  // NEW PRODUCTS - Adding 6 more sample products
+  {
+    name: "Seiko Prospex Turtle",
+    category: "sport",
+    sku: "SEI-TUR-007",
+    price: 250,
+    originalPrice: 299,
+    description: "The legendary Seiko Turtle returns with modern updates while maintaining its iconic cushion case design. Perfect for diving enthusiasts and collectors who appreciate vintage-inspired sports watches.",
+    shortDescription: "Iconic diving watch with vintage-inspired design",
+    specifications: {
+      movement: "Automatic",
+      caseMaterial: "Stainless steel",
+      waterResistance: "200m",
+      crystal: "Hardlex crystal",
+      bezel: "Unidirectional rotating bezel",
+      bracelet: "Stainless steel bracelet"
+    },
+    features: [
+      "Automatic movement",
+      "200m water resistance",
+      "Unidirectional rotating bezel",
+      "LumiBrite hands and markers",
+      "Day/date display"
+    ],
+    images: [
+      {
+        url: "https://images.unsplash.com/photo-1600721391776-b5cd0e0048a9?w=800",
+        alt: "Seiko Prospex Turtle front view",
+        isMain: true
+      }
+    ],
+    badge: "Heritage",
+    inStock: true,
+    quantity: 20,
+    rating: 4.4,
+    reviews: {
+      count: 88,
+      data: []
+    },
+    tags: ["sport", "diving", "seiko", "automatic", "vintage", "affordable"],
+    weight: 165,
+    dimensions: {
+      length: 45,
+      width: 43,
+      height: 13,
+      unit: "mm"
+    },
+    seo: {
+      metaTitle: "Seiko Prospex Turtle - Vintage Diving Watch | Prince Vibe",
+      metaDescription: "Discover the iconic Seiko Prospex Turtle diving watch. Classic design with modern reliability and 200m water resistance.",
+      keywords: ["seiko", "prospex", "turtle", "diving watch", "automatic watch"],
+      slug: "seiko-prospex-turtle"
+    },
+    isFeatured: false,
+    salesCount: 67,
+    viewCount: 890
+  },
+
+  {
+    name: "Tudor Black Bay 58",
+    category: "luxury",
+    sku: "TUD-BB58-008",
+    price: 3800,
+    originalPrice: 4200,
+    description: "The Tudor Black Bay 58 combines vintage aesthetics with modern performance. Inspired by Tudor's 1958 diving watch, this timepiece offers exceptional value in the luxury diving watch segment.",
+    shortDescription: "Modern luxury dive watch with vintage heritage",
+    specifications: {
+      movement: "Automatic, manufacture calibre",
+      caseMaterial: "Stainless steel",
+      waterResistance: "200m",
+      crystal: "Sapphire crystal",
+      bezel: "Unidirectional rotating bezel",
+      bracelet: "Stainless steel bracelet"
+    },
+    features: [
+      "In-house movement",
+      "39mm case size",
+      "Snowflake hands",
+      "200m water resistance",
+      "70-hour power reserve"
+    ],
+    images: [
+      {
+        url: "https://images.unsplash.com/photo-1614164185128-e4ec99c436d7?w=800",
+        alt: "Tudor Black Bay 58 front view",
+        isMain: true
+      }
+    ],
+    badge: "Heritage",
+    inStock: true,
+    quantity: 10,
+    rating: 4.7,
+    reviews: {
+      count: 45,
+      data: []
+    },
+    tags: ["luxury", "diving", "tudor", "heritage", "automatic", "manufacture"],
+    weight: 140,
+    dimensions: {
+      length: 39,
+      width: 39,
+      height: 11.9,
+      unit: "mm"
+    },
+    seo: {
+      metaTitle: "Tudor Black Bay 58 - Heritage Diving Watch | Prince Vibe",
+      metaDescription: "Experience the Tudor Black Bay 58, combining vintage diving watch aesthetics with modern luxury and reliability.",
+      keywords: ["tudor", "black bay", "diving watch", "luxury watch", "heritage"],
+      slug: "tudor-black-bay-58"
+    },
+    isFeatured: true,
+    salesCount: 34,
+    viewCount: 678
+  },
+
+  {
+    name: "Samsung Galaxy Watch6 Classic",
+    category: "smart",
+    sku: "SAM-GW6-009",
+    price: 429,
+    originalPrice: 479,
+    description: "The Samsung Galaxy Watch6 Classic combines sophisticated design with advanced health monitoring. Features rotating bezel navigation and comprehensive fitness tracking for the modern lifestyle.",
+    shortDescription: "Premium smartwatch with advanced health and fitness features",
+    specifications: {
+      display: "1.5\" Super AMOLED",
+      processor: "Exynos W930",
+      storage: "16GB",
+      connectivity: "Bluetooth, Wi-Fi, GPS",
+      batteryLife: "Up to 40 hours",
+      waterResistance: "5ATM + IP68"
+    },
+    features: [
+      "Rotating bezel navigation",
+      "Advanced sleep tracking",
+      "Body composition analysis",
+      "GPS tracking",
+      "Samsung Pay",
+      "Google Wear OS"
+    ],
+    images: [
+      {
+        url: "https://images.unsplash.com/photo-1546868871-7041f2a55e12?w=800",
+        alt: "Samsung Galaxy Watch6 Classic",
+        isMain: true
+      }
+    ],
+    badge: "New",
+    inStock: true,
+    quantity: 35,
+    rating: 4.3,
+    reviews: {
+      count: 124,
+      data: []
+    },
+    tags: ["smart", "samsung", "fitness", "health", "android", "wear os"],
+    weight: 59,
+    dimensions: {
+      length: 46.5,
+      width: 46.5,
+      height: 10.9,
+      unit: "mm"
+    },
+    seo: {
+      metaTitle: "Samsung Galaxy Watch6 Classic - Premium Smartwatch | Prince Vibe",
+      metaDescription: "Stay connected and healthy with the Samsung Galaxy Watch6 Classic. Advanced smartwatch with rotating bezel and health monitoring.",
+      keywords: ["samsung", "galaxy watch", "smartwatch", "fitness tracker", "wear os"],
+      slug: "samsung-galaxy-watch6-classic"
+    },
+    isFeatured: false,
+    salesCount: 78,
+    viewCount: 1560
+  },
+
+  {
+    name: "Citizen Eco-Drive Promaster",
+    category: "sport",
+    sku: "CIT-ECO-010",
+    price: 180,
+    originalPrice: 220,
+    description: "Powered by light, the Citizen Eco-Drive Promaster never needs a battery. Built for outdoor adventures with robust construction and reliable solar technology that keeps it running indefinitely.",
+    shortDescription: "Solar-powered outdoor watch that never needs a battery",
+    specifications: {
+      movement: "Eco-Drive solar",
+      caseMaterial: "Stainless steel",
+      waterResistance: "100m",
+      crystal: "Mineral crystal",
+      bezel: "Fixed bezel",
+      bracelet: "Nylon strap"
+    },
+    features: [
+      "Solar powered",
+      "6-month power reserve",
+      "Date display",
+      "Luminous hands",
+      "Shock resistant",
+      "Anti-magnetic"
+    ],
+    images: [
+      {
+        url: "https://images.unsplash.com/photo-1524592094714-0f0654e20314?w=800",
+        alt: "Citizen Eco-Drive Promaster",
+        isMain: true
+      }
+    ],
+    badge: "New",
+    inStock: true,
+    quantity: 25,
+    rating: 4.2,
+    reviews: {
+      count: 92,
+      data: []
+    },
+    tags: ["sport", "solar", "citizen", "eco-drive", "outdoor", "sustainable"],
+    weight: 95,
+    dimensions: {
+      length: 42,
+      width: 42,
+      height: 11,
+      unit: "mm"
+    },
+    seo: {
+      metaTitle: "Citizen Eco-Drive Promaster - Solar Sports Watch | Prince Vibe",
+      metaDescription: "Never change a battery again with the Citizen Eco-Drive Promaster. Solar-powered sports watch for outdoor enthusiasts.",
+      keywords: ["citizen", "eco-drive", "solar watch", "sports watch", "outdoor"],
+      slug: "citizen-eco-drive-promaster"
+    },
+    isFeatured: false,
+    salesCount: 156,
+    viewCount: 723
+  },
+
+  {
+    name: "Hublot Big Bang",
+    category: "luxury",
+    sku: "HUB-BB-011",
+    price: 15800,
+    originalPrice: 17500,
+    description: "The Hublot Big Bang revolutionized luxury watchmaking with its bold fusion design. Combining traditional Swiss craftsmanship with innovative materials, it's a statement piece for the modern connoisseur.",
+    shortDescription: "Bold luxury timepiece with innovative fusion design",
+    specifications: {
+      movement: "Automatic chronograph",
+      caseMaterial: "Titanium and ceramic",
+      waterResistance: "100m",
+      crystal: "Sapphire crystal",
+      bezel: "Ceramic bezel",
+      bracelet: "Rubber strap"
+    },
+    features: [
+      "Fusion of materials",
+      "Chronograph function",
+      "Skeleton dial",
+      "Automatic movement",
+      "Limited production",
+      "Ceramic bezel"
+    ],
+    images: [
+      {
+        url: "https://images.unsplash.com/photo-1612817288484-6f916006741a?w=800",
+        alt: "Hublot Big Bang front view",
+        isMain: true
+      }
+    ],
+    badge: "Exclusive",
+    inStock: true,
+    quantity: 5,
+    rating: 4.6,
+    reviews: {
+      count: 28,
+      data: []
+    },
+    tags: ["luxury", "bold", "hublot", "chronograph", "titanium", "ceramic"],
+    weight: 158,
+    dimensions: {
+      length: 44,
+      width: 44,
+      height: 15.45,
+      unit: "mm"
+    },
+    seo: {
+      metaTitle: "Hublot Big Bang - Bold Luxury Chronograph | Prince Vibe",
+      metaDescription: "Make a statement with the Hublot Big Bang. Bold luxury chronograph featuring innovative materials and fusion design.",
+      keywords: ["hublot", "big bang", "luxury chronograph", "titanium", "ceramic"],
+      slug: "hublot-big-bang"
+    },
+    isFeatured: true,
+    salesCount: 12,
+    viewCount: 234
+  },
+
+  {
+    name: "Garmin Fenix 7X Solar",
+    category: "smart",
+    sku: "GAR-F7X-012",
+    price: 899,
+    originalPrice: 999,
+    description: "The ultimate multisport GPS watch for athletes and outdoor enthusiasts. With solar charging, comprehensive training metrics, and rugged construction, it's designed to keep up with your most demanding adventures.",
+    shortDescription: "Ultimate GPS smartwatch for athletes and outdoor adventures",
+    specifications: {
+      display: "1.4\" transflective MIP",
+      processor: "Multi-GNSS GPS",
+      storage: "32GB",
+      connectivity: "Wi-Fi, Bluetooth, ANT+",
+      batteryLife: "Up to 28 days with solar",
+      waterResistance: "10ATM"
+    },
+    features: [
+      "Solar charging capability",
+      "Multi-GNSS satellite systems",
+      "Training load focus",
+      "ClimbPro ascent planner",
+      "Pulse Ox sensor",
+      "Rugged design"
+    ],
+    images: [
+      {
+        url: "https://images.unsplash.com/photo-1544117519-31a4b719223d?w=800",
+        alt: "Garmin Fenix 7X Solar",
+        isMain: true
+      }
+    ],
+    badge: "New",
+    inStock: true,
+    quantity: 15,
+    rating: 4.8,
+    reviews: {
+      count: 167,
+      data: []
+    },
+    tags: ["smart", "gps", "solar", "garmin", "multisport", "rugged"],
+    weight: 89,
+    dimensions: {
+      length: 51,
+      width: 51,
+      height: 14.9,
+      unit: "mm"
+    },
+    seo: {
+      metaTitle: "Garmin Fenix 7X Solar - Ultimate GPS Sports Watch | Prince Vibe",
+      metaDescription: "Conquer any adventure with the Garmin Fenix 7X Solar. Ultimate GPS smartwatch with solar charging and comprehensive training features.",
+      keywords: ["garmin", "fenix", "gps watch", "solar", "multisport", "adventure"],
+      slug: "garmin-fenix-7x-solar"
+    },
+    isFeatured: true,
+    salesCount: 89,
+    viewCount: 1123
   }
 ];
 
