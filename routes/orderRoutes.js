@@ -396,7 +396,43 @@ const getMyOrders = async (req, res) => {
   }
 };
 
+// @desc    Get all orders (simplified version for frontend)
+// @route   GET /api/orders
+// @access  Public (for basic order listing)
+const getAllOrdersPublic = async (req, res) => {
+  try {
+    const { page = 1, limit = 10, status } = req.query;
+    
+    // Build filter
+    const filter = {};
+    if (status) filter.status = status;
+    
+    // Get orders with basic info only
+    const orders = await Order.find(filter)
+      .select('orderNumber customer.name customer.email status summary.total createdAt')
+      .sort({ createdAt: -1 })
+      .limit(parseInt(limit))
+      .skip((parseInt(page) - 1) * parseInt(limit));
+    
+    const total = await Order.countDocuments(filter);
+    
+    res.json({
+      success: true,
+      data: orders,
+      total,
+      pages: Math.ceil(total / parseInt(limit))
+    });
+  } catch (error) {
+    console.error('Get orders error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error'
+    });
+  }
+};
+
 // Routes - Order specific routes before parameterized ones
+router.get('/', getAllOrdersPublic);  // Add this route for general order listing
 router.post('/', optionalAuth, createOrder);  // Optional auth to allow both logged-in and guest orders
 router.get('/my-orders', authenticate, getMyOrders);  // Protected route for authenticated users
 router.get('/user/:userId', authenticate, getOrdersByUserId);  // Protected route

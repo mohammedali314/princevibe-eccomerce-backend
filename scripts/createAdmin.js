@@ -11,7 +11,7 @@ const createDefaultAdmin = async () => {
     console.log('Connected to MongoDB');
 
     // Check if admin already exists
-    const existingAdmin = await Admin.findOne({ email: 'admin@princevibe.com' });
+    const existingAdmin = await Admin.findOne({ email: 'Princevibe.store@gmail.com' });
     if (existingAdmin) {
       console.log('Default admin already exists');
       process.exit(0);
@@ -22,7 +22,7 @@ const createDefaultAdmin = async () => {
     
     const defaultAdmin = new Admin({
       name: 'Prince Vibe Admin',
-      email: 'admin@princevibe.com',
+      email: 'Princevibe.store@gmail.com',
       password: hashedPassword,
       role: 'super_admin',
       permissions: {
@@ -37,7 +37,7 @@ const createDefaultAdmin = async () => {
 
     await defaultAdmin.save();
     console.log('Default admin created successfully');
-    console.log('Email: admin@princevibe.com');
+    console.log('Email: Princevibe.store@gmail.com');
     console.log('Password: admin123');
     
     process.exit(0);

@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
 
 const userSchema = new mongoose.Schema({
   firstName: {
@@ -229,6 +230,82 @@ userSchema.statics.findByCredentials = async function(email, password) {
 userSchema.statics.emailExists = async function(email) {
   const user = await this.findOne({ email });
   return !!user;
+};
+
+// Instance method to generate password reset token
+userSchema.methods.generatePasswordResetToken = function() {
+  // Generate random token
+  const resetToken = crypto.randomBytes(32).toString('hex');
+  
+  // Hash token and set to passwordResetToken field
+  this.passwordResetToken = crypto
+    .createHash('sha256')
+    .update(resetToken)
+    .digest('hex');
+  
+  // Set expire to 10 minutes from now
+  this.passwordResetExpires = Date.now() + 10 * 60 * 1000;
+  
+  return resetToken;
+};
+
+// Instance method to generate email verification token
+userSchema.methods.generateEmailVerificationToken = function() {
+  // Generate random token
+  const verificationToken = crypto.randomBytes(32).toString('hex');
+  
+  // Hash token and set to emailVerificationToken field
+  this.emailVerificationToken = crypto
+    .createHash('sha256')
+    .update(verificationToken)
+    .digest('hex');
+  
+  // Set expire to 24 hours from now
+  this.emailVerificationExpires = Date.now() + 24 * 60 * 60 * 1000;
+  
+  return verificationToken;
+};
+
+// Static method to find user by password reset token
+userSchema.statics.findByPasswordResetToken = async function(token) {
+  // Hash the token to compare with stored hashed token
+  const hashedToken = crypto
+    .createHash('sha256')
+    .update(token)
+    .digest('hex');
+  
+  // Find user with matching token and token not expired
+  return await this.findOne({
+    passwordResetToken: hashedToken,
+    passwordResetExpires: { $gt: Date.now() }
+  });
+};
+
+// Static method to find user by email verification token
+userSchema.statics.findByEmailVerificationToken = async function(token) {
+  // Hash the token to compare with stored hashed token
+  const hashedToken = crypto
+    .createHash('sha256')
+    .update(token)
+    .digest('hex');
+  
+  // Find user with matching token and token not expired
+  return await this.findOne({
+    emailVerificationToken: hashedToken,
+    emailVerificationExpires: { $gt: Date.now() }
+  });
+};
+
+// Instance method to clear password reset token
+userSchema.methods.clearPasswordResetToken = function() {
+  this.passwordResetToken = undefined;
+  this.passwordResetExpires = undefined;
+};
+
+// Instance method to clear email verification token
+userSchema.methods.clearEmailVerificationToken = function() {
+  this.emailVerificationToken = undefined;
+  this.emailVerificationExpires = undefined;
 };
 
 module.exports = mongoose.model('User', userSchema); 

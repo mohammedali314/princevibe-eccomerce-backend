@@ -1,5 +1,7 @@
 const Order = require('../models/Order');
 const Product = require('../models/Product');
+const AdminActionLog = require('../models/AdminActionLog');
+const StockMovement = require('../models/StockMovement');
 const emailService = require('../utils/emailService');
 
 // @desc    Get all orders with pagination and filtering
@@ -80,9 +82,19 @@ const getOrderById = async (req, res) => {
       });
     }
 
+    // Get order-related stock movements
+    const stockMovements = await StockMovement.getOrderMovements(order._id);
+
+    // Get order-related admin actions
+    const adminActions = await AdminActionLog.getActionsByType('order', order._id.toString());
+
     res.status(200).json({
       success: true,
-      data: order
+      data: {
+        order,
+        stockMovements,
+        adminActions: adminActions.slice(0, 10) // Limit to recent 10 actions
+      }
     });
 
   } catch (error) {
@@ -94,7 +106,7 @@ const getOrderById = async (req, res) => {
   }
 };
 
-// @desc    Update order status
+// @desc    Update order status with business logic validation
 // @route   PUT /api/admin/orders/:id/status
 // @access  Private (Admin)
 const updateOrderStatus = async (req, res) => {
@@ -102,12 +114,14 @@ const updateOrderStatus = async (req, res) => {
     const { status, note } = req.body;
     const orderId = req.params.id;
 
+    console.log('Order status update request:', { orderId, status, note, adminId: req.admin?._id });
+
     // Validate status
     const validStatuses = ['pending', 'confirmed', 'processing', 'shipped', 'delivered', 'cancelled', 'returned'];
     if (!validStatuses.includes(status)) {
       return res.status(400).json({
         success: false,
-        message: 'Invalid order status'
+        message: 'Invalid order status. Valid statuses: ' + validStatuses.join(', ')
       });
     }
 
@@ -121,8 +135,107 @@ const updateOrderStatus = async (req, res) => {
 
     const previousStatus = order.status;
 
+    // ✅ ORDER MODIFICATION RESTRICTIONS - Business Logic Validation
+    const restrictedTransitions = {
+      'delivered': ['pending', 'confirmed', 'processing'], // Can't go back from delivered
+      'cancelled': ['confirmed', 'processing', 'shipped', 'delivered'], // Can't change from cancelled (except to returned)
+      'returned': ['pending', 'confirmed', 'processing', 'shipped'] // Returns are final
+    };
+
+    if (restrictedTransitions[previousStatus] && restrictedTransitions[previousStatus].includes(status)) {
+      return res.status(400).json({
+        success: false,
+        message: `Cannot change order status from ${previousStatus} to ${status}. Invalid status transition.`
+      });
+    }
+
+    // ✅ PREVENT MODIFICATION OF OLD ORDERS
+    const orderAge = (new Date() - new Date(order.createdAt)) / (1000 * 60 * 60 * 24); // Days
+    if (orderAge > 30 && ['cancelled', 'returned'].includes(status)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Cannot cancel or return orders older than 30 days. Please contact system administrator.'
+      });
+    }
+
+    // ✅ STOCK MOVEMENT TRACKING - Handle inventory changes
+    let stockMovements = [];
+    
+    // Handle status changes that affect inventory
+    if (status === 'cancelled' && !['cancelled', 'returned'].includes(previousStatus)) {
+      // Restore inventory for cancelled orders
+      for (const item of order.items) {
+        try {
+          // Update product stock
+          await Product.findByIdAndUpdate(
+            item.productId,
+            { 
+              $inc: { quantity: item.quantity },
+              $set: { inStock: true } // Mark as in stock
+            }
+          );
+
+          // Record stock movement (if StockMovement model exists and admin is authenticated)
+          if (req.admin && StockMovement.recordMovement) {
+            const movement = await StockMovement.recordMovement({
+              productId: item.productId,
+              movementType: 'cancellation',
+              quantity: item.quantity,
+              relatedOrderId: order._id,
+              relatedOrderNumber: order.orderNumber,
+              adminId: req.admin._id,
+              adminName: req.admin.name,
+              reason: `Order cancelled - stock restored`,
+              notes: note || 'Order cancelled by admin',
+              source: 'admin'
+            });
+            stockMovements.push(movement);
+          }
+        } catch (stockError) {
+          console.error('Stock restoration error:', stockError);
+          // Continue with status update even if stock update fails
+        }
+      }
+    }
+
+    if (status === 'returned' && !['cancelled', 'returned'].includes(previousStatus)) {
+      // Restore inventory for returned orders
+      for (const item of order.items) {
+        try {
+          // Update product stock
+          await Product.findByIdAndUpdate(
+            item.productId,
+            { 
+              $inc: { quantity: item.quantity },
+              $set: { inStock: true }
+            }
+          );
+
+          // Record stock movement (if StockMovement model exists and admin is authenticated)
+          if (req.admin && StockMovement.recordMovement) {
+            const movement = await StockMovement.recordMovement({
+              productId: item.productId,
+              movementType: 'return',
+              quantity: item.quantity,
+              relatedOrderId: order._id,
+              relatedOrderNumber: order.orderNumber,
+              adminId: req.admin._id,
+              adminName: req.admin.name,
+              reason: `Order returned - stock restored`,
+              notes: note || 'Order returned by customer',
+              source: 'admin'
+            });
+            stockMovements.push(movement);
+          }
+        } catch (stockError) {
+          console.error('Stock restoration error:', stockError);
+        }
+      }
+    }
+
     // Update order status and add timeline entry
-    await order.addTimelineEntry(status, note || `Order status updated to ${status}`, req.admin.name);
+    const adminName = req.admin?.name || 'System';
+    await order.addTimelineEntry(status, note || `Order status updated to ${status}`, adminName);
 
     // Handle specific status updates
     if (status === 'shipped' && req.body.trackingNumber) {
@@ -136,6 +249,37 @@ const updateOrderStatus = async (req, res) => {
     }
 
     await order.save();
+
+    // ✅ ADMIN ACTION LOGGING (if admin is authenticated and AdminActionLog exists)
+    if (req.admin && AdminActionLog.logAction) {
+      try {
+        await AdminActionLog.logAction({
+          adminId: req.admin._id,
+          adminName: req.admin.name,
+          adminEmail: req.admin.email,
+          action: 'order_status_update',
+          targetType: 'order',
+          targetId: order._id.toString(),
+          targetName: `Order ${order.orderNumber}`,
+          description: `Updated order status from ${previousStatus} to ${status}`,
+          changes: {
+            before: { status: previousStatus },
+            after: { status: status, note: note }
+          },
+          metadata: {
+            ipAddress: req.ip,
+            userAgent: req.get('User-Agent'),
+            stockMovements: stockMovements.length,
+            trackingNumber: req.body.trackingNumber
+          },
+          severity: ['cancelled', 'returned'].includes(status) ? 'high' : 'medium',
+          status: 'success'
+        });
+      } catch (logError) {
+        console.error('Admin action logging error:', logError);
+        // Continue even if logging fails
+      }
+    }
 
     // Send appropriate email notification
     try {
@@ -152,78 +296,119 @@ const updateOrderStatus = async (req, res) => {
     res.status(200).json({
       success: true,
       message: 'Order status updated successfully',
-      data: order
-    });
-
-  } catch (error) {
-    console.error('Update order status error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Internal server error'
-    });
-  }
-};
-
-// @desc    Get order statistics
-// @route   GET /api/admin/orders/stats
-// @access  Private (Admin)
-const getOrderStats = async (req, res) => {
-  try {
-    const stats = await Order.getOrderStats();
-
-    // Get recent orders count (last 7 days)
-    const recentOrdersCount = await Order.countDocuments({
-      createdAt: { $gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) }
-    });
-
-    // Get monthly revenue trend (last 6 months)
-    const monthlyRevenue = await Order.aggregate([
-      {
-        $match: {
-          'payment.status': 'paid',
-          createdAt: { $gte: new Date(Date.now() - 6 * 30 * 24 * 60 * 60 * 1000) }
-        }
-      },
-      {
-        $group: {
-          _id: {
-            year: { $year: '$createdAt' },
-            month: { $month: '$createdAt' }
-          },
-          revenue: { $sum: '$summary.total' },
-          orders: { $sum: 1 }
-        }
-      },
-      { $sort: { '_id.year': 1, '_id.month': 1 } }
-    ]);
-
-    // Get top-selling products
-    const topProducts = await Order.aggregate([
-      { $unwind: '$items' },
-      {
-        $group: {
-          _id: '$items.productId',
-          totalSold: { $sum: '$items.quantity' },
-          totalRevenue: { $sum: { $multiply: ['$items.price', '$items.quantity'] } },
-          productName: { $first: '$items.name' }
-        }
-      },
-      { $sort: { totalSold: -1 } },
-      { $limit: 5 }
-    ]);
-
-    res.status(200).json({
-      success: true,
       data: {
-        ...stats,
-        recentOrdersCount,
-        monthlyRevenue,
-        topProducts
+        order,
+        stockMovements,
+        previousStatus,
+        newStatus: status
       }
     });
 
   } catch (error) {
-    console.error('Get order stats error:', error);
+    console.error('Update order status error:', error);
+    console.error('Error stack:', error.stack);
+    
+    // Log failed action (if admin exists and AdminActionLog exists)
+    if (req.admin && AdminActionLog.logAction) {
+      try {
+        await AdminActionLog.logAction({
+          adminId: req.admin._id,
+          adminName: req.admin.name,
+          adminEmail: req.admin.email,
+          action: 'order_status_update',
+          targetType: 'order',
+          targetId: req.params.id,
+          targetName: `Order ${req.params.id}`,
+          description: `Failed to update order status to ${req.body.status}`,
+          severity: 'high',
+          status: 'failed',
+          errorMessage: error.message
+        });
+      } catch (logError) {
+        console.error('Failed action logging error:', logError);
+      }
+    }
+
+    res.status(500).json({
+      success: false,
+      message: 'Failed to update order status',
+      error: error.message
+    });
+  }
+};
+
+// @desc    Delete order with restrictions
+// @route   DELETE /api/admin/orders/:id
+// @access  Private (Admin)
+const deleteOrder = async (req, res) => {
+  try {
+    const order = await Order.findById(req.params.id);
+    
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: 'Order not found'
+      });
+    }
+
+    // ✅ ORDER DELETION RESTRICTIONS
+    const restrictedStatuses = ['processing', 'shipped', 'delivered'];
+    if (restrictedStatuses.includes(order.status)) {
+      return res.status(400).json({
+        success: false,
+        message: `Cannot delete order with status '${order.status}'. Orders can only be deleted if they are pending, confirmed, cancelled, or returned.`
+      });
+    }
+
+    // Restore inventory if order was confirmed but not yet shipped
+    if (order.status === 'confirmed') {
+      for (const item of order.items) {
+        await Product.findByIdAndUpdate(
+          item.productId,
+          { 
+            $inc: { quantity: item.quantity },
+            $set: { inStock: true }
+          }
+        );
+
+        // Record stock movement
+        await StockMovement.recordMovement({
+          productId: item.productId,
+          movementType: 'cancellation',
+          quantity: item.quantity,
+          relatedOrderId: order._id,
+          relatedOrderNumber: order.orderNumber,
+          adminId: req.admin._id,
+          adminName: req.admin.name,
+          reason: `Order deleted - stock restored`,
+          source: 'admin'
+        });
+      }
+    }
+
+    await Order.findByIdAndDelete(req.params.id);
+
+    // Log deletion
+    await AdminActionLog.logAction({
+      adminId: req.admin._id,
+      adminName: req.admin.name,
+      adminEmail: req.admin.email,
+      action: 'order_deleted',
+      targetType: 'order',
+      targetId: order._id.toString(),
+      targetName: `Order ${order.orderNumber}`,
+      description: `Deleted order ${order.orderNumber}`,
+      severity: 'high',
+      status: 'success'
+    });
+
+    res.status(200).json({
+      success: true,
+      message: 'Order deleted successfully'
+    });
+
+  } catch (error) {
+    console.error('Delete order error:', error);
     res.status(500).json({
       success: false,
       message: 'Internal server error'
@@ -231,80 +416,50 @@ const getOrderStats = async (req, res) => {
   }
 };
 
-// @desc    Create sample orders for testing
-// @route   POST /api/admin/orders/sample
+// @desc    Get order analytics
+// @route   GET /api/admin/orders/analytics
 // @access  Private (Admin)
-const createSampleOrders = async (req, res) => {
+const getOrderAnalytics = async (req, res) => {
   try {
-    // Get some products for sample orders
-    const products = await Product.find().limit(3);
+    const { period = '30d' } = req.query;
     
-    if (products.length === 0) {
-      return res.status(400).json({
-        success: false,
-        message: 'No products found to create sample orders'
-      });
+    let startDate = new Date();
+    switch (period) {
+      case '7d':
+        startDate.setDate(startDate.getDate() - 7);
+        break;
+      case '30d':
+        startDate.setDate(startDate.getDate() - 30);
+        break;
+      case '90d':
+        startDate.setDate(startDate.getDate() - 90);
+        break;
+      default:
+        startDate.setDate(startDate.getDate() - 30);
     }
 
-    const sampleOrders = [];
-    const statuses = ['pending', 'confirmed', 'processing', 'shipped', 'delivered'];
-    const paymentMethods = ['cod', 'card', 'bank_transfer'];
-    const cities = ['Karachi', 'Lahore', 'Islamabad', 'Rawalpindi', 'Faisalabad'];
+    const analytics = await Order.aggregate([
+      {
+        $match: {
+          createdAt: { $gte: startDate }
+        }
+      },
+      {
+        $group: {
+          _id: '$status',
+          count: { $sum: 1 },
+          totalValue: { $sum: '$summary.total' }
+        }
+      }
+    ]);
 
-    for (let i = 0; i < 10; i++) {
-      const randomProduct = products[Math.floor(Math.random() * products.length)];
-      const quantity = Math.floor(Math.random() * 3) + 1;
-      const subtotal = randomProduct.price * quantity;
-      
-      const order = new Order({
-        customer: {
-          name: `Customer ${i + 1}`,
-          email: `customer${i + 1}@example.com`,
-          phone: `+92300000${1000 + i}`,
-          address: {
-            street: `Street ${i + 1}`,
-            city: cities[Math.floor(Math.random() * cities.length)],
-            state: 'Punjab',
-            zipCode: `${10000 + i}`,
-            country: 'Pakistan'
-          }
-        },
-        items: [{
-          productId: randomProduct._id,
-          name: randomProduct.name,
-          price: randomProduct.price,
-          quantity,
-          image: randomProduct.images[0]?.url || 'default-image.jpg',
-          sku: randomProduct.sku
-        }],
-        summary: {
-          subtotal,
-          tax: Math.floor(subtotal * 0.1),
-          shipping: 200,
-          discount: 0,
-          total: subtotal + Math.floor(subtotal * 0.1) + 200
-        },
-        payment: {
-          method: paymentMethods[Math.floor(Math.random() * paymentMethods.length)],
-          status: Math.random() > 0.3 ? 'paid' : 'pending'
-        },
-        status: statuses[Math.floor(Math.random() * statuses.length)],
-        createdAt: new Date(Date.now() - Math.random() * 30 * 24 * 60 * 60 * 1000) // Random date in last 30 days
-      });
-
-      sampleOrders.push(order);
-    }
-
-    await Order.insertMany(sampleOrders);
-
-    res.status(201).json({
+    res.status(200).json({
       success: true,
-      message: `${sampleOrders.length} sample orders created successfully`,
-      data: sampleOrders
+      data: analytics
     });
 
   } catch (error) {
-    console.error('Create sample orders error:', error);
+    console.error('Get analytics error:', error);
     res.status(500).json({
       success: false,
       message: 'Internal server error'
@@ -316,6 +471,6 @@ module.exports = {
   getAllOrders,
   getOrderById,
   updateOrderStatus,
-  getOrderStats,
-  createSampleOrders
+  deleteOrder,
+  getOrderAnalytics
 }; 

@@ -161,7 +161,7 @@ adminSchema.statics.createDefaultAdmin = async function() {
   
   if (!adminExists) {
     const defaultAdmin = new this({
-      email: process.env.ADMIN_EMAIL || 'admin@princevibe.com',
+      email: process.env.ADMIN_EMAIL || 'Princevibe.store@gmail.com',
       password: process.env.ADMIN_PASSWORD || 'admin123',
       name: 'Super Admin',
       role: 'super_admin',

@@ -25,9 +25,20 @@ const {
   getAllOrders,
   getOrderById,
   updateOrderStatus,
-  getOrderStats,
-  createSampleOrders
+  deleteOrder,
+  getOrderAnalytics
 } = require('../controllers/orderController');
+
+const {
+  getAdminActionLogs,
+  getRecentActions,
+  getActionStats,
+  getLowStockAlerts,
+  resolveLowStockAlert,
+  getStockAlertStats,
+  getStockMovements,
+  getProductStockSummary
+} = require('../controllers/adminLogController');
 
 const { authenticateAdmin } = require('../middleware/auth');
 const { uploadMultiple } = require('../middleware/upload');
@@ -57,11 +68,25 @@ router.post('/products/:id/images', uploadMultiple, uploadProductImages);
 router.delete('/products/:id/images/:imageId', deleteProductImage);
 
 // Order Management Routes
-router.get('/orders/stats', getOrderStats);
+router.get('/orders/analytics', getOrderAnalytics);
 router.get('/orders', getAllOrders);
 router.get('/orders/:id', getOrderById);
 router.put('/orders/:id/status', updateOrderStatus);
-router.post('/orders/sample', createSampleOrders);
+router.delete('/orders/:id', deleteOrder);
+
+// Admin Action Logging Routes
+router.get('/logs/actions', getAdminActionLogs);
+router.get('/logs/recent', getRecentActions);
+router.get('/logs/stats', getActionStats);
+
+// Stock Alert Management Routes
+router.get('/alerts/stock', getLowStockAlerts);
+router.put('/alerts/stock/:id/resolve', resolveLowStockAlert);
+router.get('/alerts/stock/stats', getStockAlertStats);
+
+// Stock Movement Routes
+router.get('/stock/movements', getStockMovements);
+router.get('/stock/movements/:productId/summary', getProductStockSummary);
 
 // Analytics Routes
 router.get('/analytics/dashboard', async (req, res) => {

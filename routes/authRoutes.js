@@ -7,7 +7,9 @@ const {
   getProfile,
   updateProfile,
   changePassword,
-  deleteAccount
+  deleteAccount,
+  forgotPassword,
+  resetPassword
 } = require('../controllers/authController');
 const { authenticate } = require('../middleware/userAuth');
 
@@ -21,8 +23,18 @@ router.post('/register', register);
 // @access  Public
 router.post('/login', login);
 
+// @route   POST /api/auth/forgot-password
+// @desc    Send password reset email
+// @access  Public
+router.post('/forgot-password', forgotPassword);
+
+// @route   POST /api/auth/reset-password/:token
+// @desc    Reset password with token
+// @access  Public
+router.post('/reset-password/:token', resetPassword);
+
 // @route   POST /api/auth/logout
-// @desc    Logout user
+// @desc    Logout user (clear token client-side)
 // @access  Private
 router.post('/logout', authenticate, logout);
 
@@ -37,7 +49,7 @@ router.get('/profile', authenticate, getProfile);
 router.put('/profile', authenticate, updateProfile);
 
 // @route   PUT /api/auth/change-password
-// @desc    Change user password
+// @desc    Change password
 // @access  Private
 router.put('/change-password', authenticate, changePassword);
 
