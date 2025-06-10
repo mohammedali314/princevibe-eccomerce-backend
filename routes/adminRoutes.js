@@ -108,13 +108,44 @@ router.get('/analytics/dashboard', async (req, res) => {
     });
     console.log('Recent orders:', recentOrders);
     
-    console.log('Fetching revenue...');
-    // Get revenue
-    const revenue = await Order.aggregate([
-      { $match: { 'payment.status': 'paid' } },
+    // 💰 IMPROVED REVENUE TRACKING - Separate confirmed from pending
+    console.log('Fetching revenue breakdown...');
+    
+    // Confirmed Revenue (shipped/delivered orders only)
+    const confirmedRevenue = await Order.aggregate([
+      { $match: { status: { $in: ['shipped', 'delivered'] } } },
       { $group: { _id: null, total: { $sum: '$summary.total' } } }
     ]);
-    console.log('Revenue aggregate result:', revenue);
+    
+    // Pending Revenue (confirmed/processing orders)
+    const pendingRevenue = await Order.aggregate([
+      { $match: { status: { $in: ['confirmed', 'processing'] } } },
+      { $group: { _id: null, total: { $sum: '$summary.total' } } }
+    ]);
+    
+    // Total Revenue (all paid orders except cancelled/returned)
+    const totalRevenueResult = await Order.aggregate([
+      { $match: { status: { $nin: ['cancelled', 'returned'] } } },
+      { $group: { _id: null, total: { $sum: '$summary.total' } } }
+    ]);
+    
+    // Revenue by Status for detailed analysis
+    const revenueByStatus = await Order.aggregate([
+      { $match: { status: { $nin: ['cancelled', 'returned'] } } },
+      {
+        $group: {
+          _id: '$status',
+          count: { $sum: 1 },
+          revenue: { $sum: '$summary.total' }
+        }
+      }
+    ]);
+    
+    console.log('Revenue breakdown:', {
+      confirmed: confirmedRevenue[0]?.total || 0,
+      pending: pendingRevenue[0]?.total || 0,
+      total: totalRevenueResult[0]?.total || 0
+    });
     
     console.log('Fetching low stock products...');
     // Get low stock products
@@ -127,7 +158,11 @@ router.get('/analytics/dashboard', async (req, res) => {
       totalProducts,
       totalOrders,
       recentOrders,
-      totalRevenue: revenue[0]?.total || 0,
+      // Enhanced revenue tracking
+      totalRevenue: totalRevenueResult[0]?.total || 0,
+      confirmedRevenue: confirmedRevenue[0]?.total || 0,
+      pendingRevenue: pendingRevenue[0]?.total || 0,
+      revenueByStatus,
       lowStockProducts
     };
     

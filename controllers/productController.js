@@ -1,4 +1,5 @@
 const Product = require('../models/Product');
+const AdminActionLog = require('../models/AdminActionLog');
 const { deleteFile, getFileUrl } = require('../middleware/upload');
 const { uploadToCloudinary, deleteFromCloudinary, getOptimizedUrl } = require('../config/cloudinary');
 const path = require('path');
@@ -398,6 +399,11 @@ const createProduct = async (req, res) => {
       // Ensure arrays are properly handled
       features: Array.isArray(productData.features) ? productData.features : [],
       tags: Array.isArray(productData.tags) ? productData.tags : [],
+      // Handle reviews field properly
+      reviews: {
+        count: parseInt(productData.reviews) || 0,
+        data: []
+      },
       // Generate SKU if not provided
       sku: productData.sku || `PV-${Date.now()}-${Math.random().toString(36).substr(2, 4).toUpperCase()}`,
       // Auto-generate slug if not provided
@@ -416,6 +422,32 @@ const createProduct = async (req, res) => {
     const savedProduct = await product.save();
     
     console.log('Product created successfully:', savedProduct._id);
+    
+    // Log product creation activity
+    if (req.admin) {
+      try {
+        await AdminActionLog.logAction({
+          adminId: req.admin._id,
+          adminName: req.admin.name,
+          adminEmail: req.admin.email,
+          action: 'product_created',
+          targetType: 'product',
+          targetId: savedProduct._id.toString(),
+          targetName: savedProduct.name,
+          description: `Created new product: ${savedProduct.name} (${savedProduct.sku})`,
+          metadata: {
+            ipAddress: req.ip || req.connection.remoteAddress,
+            userAgent: req.get('User-Agent'),
+            productCategory: savedProduct.category,
+            productPrice: savedProduct.price
+          },
+          severity: 'medium',
+          status: 'success'
+        });
+      } catch (logError) {
+        console.error('Failed to log product creation activity:', logError);
+      }
+    }
     
     res.status(201).json({
       success: true,
@@ -472,11 +504,14 @@ const updateProduct = async (req, res) => {
     let updateData = {};
 
     // Handle basic fields
-    const basicFields = ['name', 'description', 'price', 'comparePrice', 'category', 'sku', 'quantity', 'rating', 'inStock', 'isFeatured', 'isActive'];
+    const basicFields = ['name', 'description', 'price', 'comparePrice', 'category', 'sku', 'quantity', 'rating', 'reviews', 'inStock', 'isFeatured', 'isActive'];
     basicFields.forEach(field => {
       if (req.body[field] !== undefined) {
         if (field === 'price' || field === 'comparePrice' || field === 'quantity' || field === 'rating') {
           updateData[field] = Number(req.body[field]);
+        } else if (field === 'reviews') {
+          // Handle reviews count properly
+          updateData['reviews.count'] = parseInt(req.body[field]) || 0;
         } else if (field === 'inStock' || field === 'isFeatured' || field === 'isActive') {
           updateData[field] = req.body[field] === 'true' || req.body[field] === true;
         } else {

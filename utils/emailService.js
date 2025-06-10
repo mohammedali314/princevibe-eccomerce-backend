@@ -78,7 +78,7 @@ class EmailService {
       }
 
       const mailOptions = {
-        from: process.env.FROM_EMAIL || 'Princevibe.store@gmail.com',
+        from: process.env.FROM_EMAIL,
         to: options.to,
         subject: options.subject,
         html: options.html || options.text,

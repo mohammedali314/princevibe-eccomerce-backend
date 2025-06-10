@@ -1,4 +1,5 @@
 const Admin = require('../models/Admin');
+const AdminActionLog = require('../models/AdminActionLog');
 const {
   generateToken,
   generateRefreshToken,
@@ -56,6 +57,30 @@ const adminLogin = async (req, res) => {
     
     // Update last login
     await admin.updateLastLogin();
+    
+    // Log admin login activity
+    try {
+      await AdminActionLog.logAction({
+        adminId: admin._id,
+        adminName: admin.name,
+        adminEmail: admin.email,
+        action: 'admin_login',
+        targetType: 'admin',
+        targetId: admin._id.toString(),
+        targetName: admin.name,
+        description: `Admin ${admin.name} logged in successfully`,
+        metadata: {
+          ipAddress: req.ip || req.connection.remoteAddress,
+          userAgent: req.get('User-Agent'),
+          sessionId: req.sessionID
+        },
+        severity: 'low',
+        status: 'success'
+      });
+    } catch (logError) {
+      console.error('Failed to log admin login activity:', logError);
+      // Don't fail the login if activity logging fails
+    }
     
     // Generate tokens
     const token = generateToken(admin._id);

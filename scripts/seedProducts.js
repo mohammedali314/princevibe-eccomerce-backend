@@ -2,6 +2,7 @@ const mongoose = require('mongoose');
 const dotenv = require('dotenv');
 const Product = require('../models/Product');
 const Admin = require('../models/Admin');
+const AdminActionLog = require('../models/AdminActionLog');
 
 // Load environment variables
 dotenv.config();
@@ -50,9 +51,9 @@ const sampleProducts = [
       count: 127,
       data: [
         {
-          user: "John D.",
+          user: "Ahmed Hassan",
           rating: 5,
-          comment: "Absolutely stunning watch. Worth every penny!",
+          comment: "Bilkul amazing quality! Price ke comparison mein bohat best value hai. Highly recommend!",
           date: new Date("2024-01-15")
         }
       ]
@@ -120,9 +121,9 @@ const sampleProducts = [
       count: 88,
       data: [
         {
-          user: "Sarah M.",
+          user: "Fatima Malik",
           rating: 5,
-          comment: "Perfect for my outdoor adventures. Battery life is amazing!",
+          comment: "Perfect for my outdoor adventures. Battery life is amazing! Delivery bhi bohat fast thi.",
           date: new Date("2024-02-10")
         }
       ]
@@ -778,6 +779,136 @@ const createDefaultAdmin = async () => {
   }
 };
 
+const createSampleAdminActivity = async () => {
+  try {
+    console.log('📝 Creating sample admin activity logs...');
+    
+    // Clear existing activity logs
+    await AdminActionLog.deleteMany({});
+    console.log('🗑️ Cleared existing admin activity logs');
+    
+    // Find the admin to use for sample activities
+    const admin = await Admin.findOne({});
+    if (!admin) {
+      console.log('⚠️ No admin found, skipping activity log creation');
+      return;
+    }
+    
+    // Find some products to reference
+    const products = await Product.find({}).limit(3);
+    
+    // Create sample activity logs
+    const sampleActivities = [
+      {
+        adminId: admin._id,
+        adminName: admin.name,
+        adminEmail: admin.email,
+        action: 'admin_login',
+        targetType: 'admin',
+        targetId: admin._id.toString(),
+        targetName: admin.name,
+        description: `Admin ${admin.name} logged in successfully`,
+        metadata: {
+          ipAddress: '127.0.0.1',
+          userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+          sessionId: 'demo-session'
+        },
+        severity: 'low',
+        status: 'success',
+        timestamp: new Date(Date.now() - 10 * 60 * 1000) // 10 minutes ago
+      },
+      {
+        adminId: admin._id,
+        adminName: admin.name,
+        adminEmail: admin.email,
+        action: 'product_created',
+        targetType: 'product',
+        targetId: products[0]?._id?.toString() || 'demo-product-1',
+        targetName: products[0]?.name || 'Sample Product',
+        description: `Created new product: ${products[0]?.name || 'Sample Product'}`,
+        metadata: {
+          ipAddress: '127.0.0.1',
+          userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+          productCategory: products[0]?.category || 'luxury',
+          productPrice: products[0]?.price || 1000
+        },
+        severity: 'medium',
+        status: 'success',
+        timestamp: new Date(Date.now() - 25 * 60 * 1000) // 25 minutes ago
+      },
+      {
+        adminId: admin._id,
+        adminName: admin.name,
+        adminEmail: admin.email,
+        action: 'inventory_updated',
+        targetType: 'product',
+        targetId: products[1]?._id?.toString() || 'demo-product-2',
+        targetName: products[1]?.name || 'Sample Product 2',
+        description: `Updated inventory for: ${products[1]?.name || 'Sample Product 2'}`,
+        metadata: {
+          ipAddress: '127.0.0.1',
+          userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+          previousQuantity: 10,
+          newQuantity: 15,
+          changeReason: 'Stock replenishment'
+        },
+        severity: 'medium',
+        status: 'success',
+        timestamp: new Date(Date.now() - 45 * 60 * 1000) // 45 minutes ago
+      },
+      {
+        adminId: admin._id,
+        adminName: admin.name,
+        adminEmail: admin.email,
+        action: 'product_updated',
+        targetType: 'product',
+        targetId: products[2]?._id?.toString() || 'demo-product-3',
+        targetName: products[2]?.name || 'Sample Product 3',
+        description: `Updated product: ${products[2]?.name || 'Sample Product 3'}`,
+        metadata: {
+          ipAddress: '127.0.0.1',
+          userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+          fieldsUpdated: ['price', 'description']
+        },
+        severity: 'medium',
+        status: 'success',
+        timestamp: new Date(Date.now() - 2 * 60 * 60 * 1000) // 2 hours ago
+      },
+      {
+        adminId: admin._id,
+        adminName: admin.name,
+        adminEmail: admin.email,
+        action: 'bulk_inventory_update',
+        targetType: 'system',
+        targetId: 'bulk-update-' + Date.now(),
+        targetName: 'Bulk Inventory Update',
+        description: 'Performed bulk inventory update on multiple products',
+        metadata: {
+          ipAddress: '127.0.0.1',
+          userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+          affectedRecords: 12,
+          updateType: 'stock_levels'
+        },
+        severity: 'high',
+        status: 'success',
+        timestamp: new Date(Date.now() - 4 * 60 * 60 * 1000) // 4 hours ago
+      }
+    ];
+    
+    // Insert sample activities
+    const createdActivities = await AdminActionLog.insertMany(sampleActivities);
+    console.log(`✅ Created ${createdActivities.length} sample admin activity logs`);
+    
+    // Display created activities
+    createdActivities.forEach(activity => {
+      console.log(`📋 ${activity.action} - ${activity.description}`);
+    });
+    
+  } catch (error) {
+    console.error('❌ Error creating sample admin activity:', error.message);
+  }
+};
+
 const seedDatabase = async () => {
   try {
     await connectDB();
@@ -787,13 +918,19 @@ const seedDatabase = async () => {
     
     await createDefaultAdmin();
     await seedProducts();
+    await createSampleAdminActivity();
     
     console.log('─────────────────────────────────────────────');
-    console.log('✅ Database seeding completed successfully!');
-    console.log('🎯 You can now start the server with: npm run dev');
-    console.log('🔑 Default admin credentials:');
-    console.log(`   Email: ${process.env.ADMIN_EMAIL || 'admin@princevibe.com'}`);
-    console.log(`   Password: ${process.env.ADMIN_PASSWORD || 'admin123'}`);
+    console.log('\n🎯 Next Steps:');
+    console.log('1. Start your server: npm run dev');
+    console.log('2. Access admin panel: http://localhost:5000/admin');
+    console.log('3. Use environment variables for admin login');
+    console.log('4. Check your product catalog');
+    console.log('5. Check Recent Activity section in dashboard');
+    console.log('6. Test order management features');
+    
+    console.log('\n✅ Database seeding completed successfully!');
+    console.log('🚀 Prince Vibe Backend is ready with sample activity data!');
     
     process.exit(0);
     

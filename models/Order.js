@@ -184,4 +184,68 @@ orderSchema.statics.getOrderStats = async function() {
   };
 };
 
+// 💰 Enhanced Revenue Analysis Method
+orderSchema.statics.getRevenueAnalysis = async function(dateRange = null) {
+  const matchCondition = dateRange ? { createdAt: { $gte: dateRange.start, $lte: dateRange.end } } : {};
+  
+  // Revenue by status (excluding cancelled/returned)
+  const revenueByStatus = await this.aggregate([
+    { $match: { ...matchCondition, status: { $nin: ['cancelled', 'returned'] } } },
+    {
+      $group: {
+        _id: '$status',
+        count: { $sum: 1 },
+        revenue: { $sum: '$summary.total' },
+        avgOrderValue: { $avg: '$summary.total' }
+      }
+    }
+  ]);
+  
+  // Confirmed Revenue (shipped/delivered)
+  const confirmedRevenue = await this.aggregate([
+    { $match: { ...matchCondition, status: { $in: ['shipped', 'delivered'] } } },
+    { $group: { _id: null, total: { $sum: '$summary.total' }, count: { $sum: 1 } } }
+  ]);
+  
+  // Pending Revenue (confirmed/processing)
+  const pendingRevenue = await this.aggregate([
+    { $match: { ...matchCondition, status: { $in: ['confirmed', 'processing'] } } },
+    { $group: { _id: null, total: { $sum: '$summary.total' }, count: { $sum: 1 } } }
+  ]);
+  
+  // Risk Analysis (cancelled/returned orders)
+  const lostRevenue = await this.aggregate([
+    { $match: { ...matchCondition, status: { $in: ['cancelled', 'returned'] } } },
+    { $group: { _id: null, total: { $sum: '$summary.total' }, count: { $sum: 1 } } }
+  ]);
+  
+  // Daily revenue trend
+  const dailyRevenue = await this.aggregate([
+    { $match: { ...matchCondition, status: { $nin: ['cancelled', 'returned'] } } },
+    {
+      $group: {
+        _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
+        revenue: { $sum: '$summary.total' },
+        orders: { $sum: 1 }
+      }
+    },
+    { $sort: { '_id': 1 } }
+  ]);
+  
+  return {
+    revenueByStatus,
+    confirmedRevenue: confirmedRevenue[0] || { total: 0, count: 0 },
+    pendingRevenue: pendingRevenue[0] || { total: 0, count: 0 },
+    lostRevenue: lostRevenue[0] || { total: 0, count: 0 },
+    dailyRevenue,
+    totalRevenue: (confirmedRevenue[0]?.total || 0) + (pendingRevenue[0]?.total || 0),
+    revenueAtRisk: pendingRevenue[0]?.total || 0,
+    conversionRate: {
+      confirmed: confirmedRevenue[0]?.count || 0,
+      pending: pendingRevenue[0]?.count || 0,
+      lost: lostRevenue[0]?.count || 0
+    }
+  };
+};
+
 module.exports = mongoose.model('Order', orderSchema); 

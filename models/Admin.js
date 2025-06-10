@@ -157,28 +157,31 @@ adminSchema.statics.findByEmail = function(email) {
 
 // Static method to create default admin
 adminSchema.statics.createDefaultAdmin = async function() {
-  const adminExists = await this.findOne({ role: 'super_admin' });
-  
-  if (!adminExists) {
-    const defaultAdmin = new this({
-      email: process.env.ADMIN_EMAIL || 'Princevibe.store@gmail.com',
-      password: process.env.ADMIN_PASSWORD || 'admin123',
-      name: 'Super Admin',
-      role: 'super_admin',
-      permissions: {
-        products: { create: true, read: true, update: true, delete: true },
-        orders: { create: true, read: true, update: true, delete: true },
-        users: { create: true, read: true, update: true, delete: true },
-        analytics: { read: true }
-      }
-    });
+  try {
+    const existingAdmin = await this.findOne({});
     
-    await defaultAdmin.save();
-    console.log('✅ Default admin created successfully');
-    return defaultAdmin;
+    if (!existingAdmin) {
+      const defaultAdmin = new this({
+        name: process.env.ADMIN_NAME || 'Admin',
+        email: process.env.ADMIN_EMAIL,
+        password: process.env.ADMIN_PASSWORD,
+        role: 'admin',
+        isActive: true,
+        permissions: {
+          products: { create: true, read: true, update: true, delete: true },
+          orders: { create: true, read: true, update: true, delete: true },
+          users: { create: true, read: true, update: true, delete: true },
+          analytics: { read: true },
+          settings: { read: true, update: true }
+        }
+      });
+
+      await defaultAdmin.save();
+      console.log('✅ Default admin created from environment variables');
+    }
+  } catch (error) {
+    console.error('Error creating default admin:', error);
   }
-  
-  return adminExists;
 };
 
 // Index for better query performance
