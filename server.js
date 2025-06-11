@@ -120,6 +120,8 @@ app.use(cors({
       'http://localhost:3000',
       'http://localhost:5000',
       'https://princevibe-eccomerce.vercel.app',
+      'https://princevibe.store',
+      'https://www.princevibe.store',
       process.env.FRONTEND_URL,
       // Add Railway app domains
       /\.railway\.app$/,
