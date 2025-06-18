@@ -6,7 +6,9 @@ const {
   getProductsByCategory,
   getFeaturedProducts,
   searchProducts,
-  getProductStats
+  getProductStats,
+  getProductReviews,
+  addProductReview
 } = require('../controllers/productController');
 
 // Public Routes (no authentication required)
@@ -28,5 +30,11 @@ router.get('/stats', getProductStats);
 
 // GET /api/products/:id - Get single product by ID
 router.get('/:id', getProductById);
+
+// GET /api/products/:id/reviews - Get reviews for a product
+router.get('/:id/reviews', getProductReviews);
+
+// POST /api/products/:id/reviews - Add a review to a product
+router.post('/:id/reviews', addProductReview);
 
 module.exports = router; 

@@ -48,11 +48,11 @@ const initializePayment = async (req, res) => {
     }
 
     // Check if payment method is supported
-    const supportedMethods = ['cod', 'mastercard', 'googlepay'];
+    const supportedMethods = ['cod'];
     if (!supportedMethods.includes(paymentMethod)) {
       return res.status(400).json({
         success: false,
-        message: 'Payment method not supported or temporarily unavailable'
+        message: 'We currently accept Cash on Delivery (COD) only. Other payment methods are not available at this time.'
       });
     }
 
@@ -76,24 +76,13 @@ const initializePayment = async (req, res) => {
     let paymentResponse;
 
     switch (paymentMethod) {
-      case 'mastercard':
-        paymentResponse = await initializeMastercard(order, amount);
-        break;
-      case 'googlepay':
-        paymentResponse = await initializeGooglePay(order, amount);
-        break;
       case 'cod':
         paymentResponse = await processCOD(order);
         break;
-      case 'faysal':
-        return res.status(400).json({
-          success: false,
-          message: 'Faysal Bank payment is temporarily unavailable. Please use another payment method.'
-        });
       default:
         return res.status(400).json({
           success: false,
-          message: 'Unsupported payment method'
+          message: 'We currently accept Cash on Delivery (COD) only. Other payment methods are not available at this time.'
         });
     }
 
@@ -348,36 +337,16 @@ router.get('/methods', (req, res) => {
     {
       id: 'cod',
       name: 'Cash on Delivery',
-      description: 'Pay when your order is delivered',
+      description: 'Pay cash when your order is delivered to your doorstep',
       enabled: true,
       popular: true
-    },
-    {
-      id: 'mastercard',
-      name: 'Mastercard',
-      description: 'Secure credit/debit card payment',
-      enabled: true,
-      popular: true
-    },
-    {
-      id: 'googlepay',
-      name: 'Google Pay',
-      description: 'Quick & secure Google Pay',
-      enabled: true,
-      popular: false
-    },
-    {
-      id: 'faysal',
-      name: 'Faysal Bank',
-      description: 'Coming soon - Under development',
-      enabled: false,
-      popular: false
     }
   ];
 
   res.json({
     success: true,
-    data: supportedMethods.filter(method => method.enabled)
+    data: supportedMethods,
+    message: 'We currently accept Cash on Delivery (COD) only for your security and convenience.'
   });
 });
 
