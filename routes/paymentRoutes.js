@@ -3,6 +3,7 @@ const crypto = require('crypto');
 const axios = require('axios');
 const Order = require('../models/Order');
 const emailService = require('../utils/emailService');
+const { google } = require('googleapis');
 
 const router = express.Router();
 
@@ -348,6 +349,61 @@ router.get('/methods', (req, res) => {
     data: supportedMethods,
     message: 'We currently accept Cash on Delivery (COD) only for your security and convenience.'
   });
+});
+
+// This is a mock implementation. In a real application, you would use a proper
+// payment processing library and handle the token securely.
+router.post('/process-google-pay', async (req, res) => {
+  const { paymentToken } = req.body;
+
+  if (!paymentToken) {
+    return res.status(400).json({ error: 'Payment token is required' });
+  }
+
+  try {
+    // In a real implementation, you would send the payment token to your
+    // payment processor (e.g., Stripe, Braintree) to complete the charge.
+    // For this example, we'll just simulate a successful payment.
+    console.log('Processing Google Pay token:', paymentToken);
+
+    // Simulate a successful payment response
+    res.status(200).json({
+      success: true,
+      message: 'Payment processed successfully',
+      transactionId: `txn_${Date.now()}`,
+    });
+  } catch (error) {
+    console.error('Error processing Google Pay payment:', error);
+    res.status(500).json({ error: 'Failed to process payment' });
+  }
+});
+
+module.exports = router; 
+// This is a mock implementation. In a real application, you would use a proper
+// payment processing library and handle the token securely.
+router.post('/process-google-pay', async (req, res) => {
+  const { paymentToken } = req.body;
+
+  if (!paymentToken) {
+    return res.status(400).json({ error: 'Payment token is required' });
+  }
+
+  try {
+    // In a real implementation, you would send the payment token to your
+    // payment processor (e.g., Stripe, Braintree) to complete the charge.
+    // For this example, we'll just simulate a successful payment.
+    console.log('Processing Google Pay token:', paymentToken);
+
+    // Simulate a successful payment response
+    res.status(200).json({
+      success: true,
+      message: 'Payment processed successfully',
+      transactionId: `txn_${Date.now()}`,
+    });
+  } catch (error) {
+    console.error('Error processing Google Pay payment:', error);
+    res.status(500).json({ error: 'Failed to process payment' });
+  }
 });
 
 module.exports = router; 

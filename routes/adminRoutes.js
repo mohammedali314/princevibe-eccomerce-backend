@@ -16,8 +16,8 @@ const {
   deleteProduct,
   uploadProductImages,
   deleteProductImage,
-  getAllProducts,
-  getProductById,
+  getAllProductsForAdmin,
+  getProductByIdForAdmin,
   getProductStats
 } = require('../controllers/productController');
 
@@ -57,8 +57,8 @@ router.put('/profile', updateAdminProfile);
 
 // Product Management Routes
 router.get('/products/stats', getProductStats);
-router.get('/products/:id', getProductById);
-router.get('/products', getAllProducts);
+router.get('/products/:id', getProductByIdForAdmin);
+router.get('/products', getAllProductsForAdmin);
 router.post('/products', uploadMultiple, createProduct);
 router.put('/products/:id', uploadMultiple, updateProduct);
 router.delete('/products/:id', deleteProduct);

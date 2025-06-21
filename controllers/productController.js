@@ -3,6 +3,7 @@ const AdminActionLog = require('../models/AdminActionLog');
 const { deleteFile, getFileUrl } = require('../middleware/upload');
 const { uploadToCloudinary, deleteFromCloudinary, getOptimizedUrl } = require('../config/cloudinary');
 const path = require('path');
+const mongoose = require('mongoose');
 
 // Helper function to build query filters
 const buildQuery = (queryParams) => {
@@ -113,7 +114,31 @@ const getAllProducts = async (req, res) => {
 // @access  Public
 const getProductById = async (req, res) => {
   try {
-    const product = await Product.findById(req.params.id).select('-__v');
+    // Use aggregation to handle corrupted reviews data
+    const pipeline = [
+      { $match: { _id: new mongoose.Types.ObjectId(req.params.id) } },
+      {
+        $addFields: {
+          reviews: {
+            $cond: {
+              if: { $type: "$reviews" },
+              then: {
+                $cond: {
+                  if: { $eq: [{ $type: "$reviews" }, "number"] },
+                  then: { count: "$reviews", data: [] },
+                  else: "$reviews"
+                }
+              },
+              else: { count: 0, data: [] }
+            }
+          }
+        }
+      },
+      { $project: { __v: 0 } }
+    ];
+
+    const products = await Product.aggregate(pipeline);
+    const product = products[0];
     
     if (!product || !product.isActive) {
       return res.status(404).json({
@@ -122,8 +147,8 @@ const getProductById = async (req, res) => {
       });
     }
     
-    // Increment view count
-    await product.incrementViews();
+    // Increment view count using a separate operation
+    await Product.findByIdAndUpdate(req.params.id, { $inc: { viewCount: 1 } });
     
     res.status(200).json({
       success: true,
@@ -401,7 +426,7 @@ const createProduct = async (req, res) => {
       tags: Array.isArray(productData.tags) ? productData.tags : [],
       // Handle reviews field properly
       reviews: {
-        count: parseInt(productData.reviews) || 0,
+        count: parseInt(productData.reviews?.count || productData.reviews) || 0,
         data: []
       },
       // Generate SKU if not provided
@@ -491,7 +516,30 @@ const updateProduct = async (req, res) => {
     console.log('Body:', req.body);
     console.log('Files:', req.files);
     
-    const product = await Product.findById(req.params.id);
+    // Use aggregation to handle corrupted reviews data when fetching existing product
+    const pipeline = [
+      { $match: { _id: new mongoose.Types.ObjectId(req.params.id) } },
+      {
+        $addFields: {
+          reviews: {
+            $cond: {
+              if: { $type: "$reviews" },
+              then: {
+                $cond: {
+                  if: { $eq: [{ $type: "$reviews" }, "number"] },
+                  then: { count: "$reviews", data: [] },
+                  else: "$reviews"
+                }
+              },
+              else: { count: 0, data: [] }
+            }
+          }
+        }
+      }
+    ];
+
+    const products = await Product.aggregate(pipeline);
+    const product = products[0];
     
     if (!product) {
       return res.status(404).json({
@@ -510,8 +558,12 @@ const updateProduct = async (req, res) => {
         if (field === 'price' || field === 'comparePrice' || field === 'quantity' || field === 'rating') {
           updateData[field] = Number(req.body[field]);
         } else if (field === 'reviews') {
-          // Handle reviews count properly
-          updateData['reviews.count'] = parseInt(req.body[field]) || 0;
+          const reviewsData = req.body[field];
+          // Handle reviews field properly - update the entire object
+          updateData.reviews = {
+            count: parseInt(reviewsData?.count || reviewsData) || 0,
+            data: product.reviews?.data || []
+          };
         } else if (field === 'inStock' || field === 'isFeatured' || field === 'isActive') {
           updateData[field] = req.body[field] === 'true' || req.body[field] === true;
         } else {
@@ -605,6 +657,30 @@ const updateProduct = async (req, res) => {
 
     // Update the images in the update data
     updateData.images = updatedImages;
+
+    // Handle setting a new main image from the existing set
+    if (req.body.mainImagePublicId) {
+      let mainFound = false;
+      updateData.images.forEach(img => {
+        if (img.publicId === req.body.mainImagePublicId) {
+          img.isMain = true;
+          mainFound = true;
+        } else {
+          img.isMain = false;
+        }
+      });
+
+      // If new images are added and one of them is set as main
+      if (!mainFound && newImages.length > 0 && req.body.mainImageIndex !== undefined) {
+          const mainIndex = parseInt(req.body.mainImageIndex, 10);
+          if (!isNaN(mainIndex) && mainIndex < newImages.length) {
+              const newImagePublicId = newImages[mainIndex].publicId;
+              updateData.images.forEach(img => {
+                  img.isMain = img.publicId === newImagePublicId;
+              });
+          }
+      }
+    }
 
     // Generate slug if name is being updated
     if (updateData.name) {
@@ -988,6 +1064,131 @@ const addProductReview = async (req, res) => {
   }
 };
 
+// @desc    Get all products for Admin with filtering, sorting, and pagination
+// @route   GET /api/admin/products
+// @access  Private/Admin
+const getAllProductsForAdmin = async (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 12;
+    const skip = (page - 1) * limit;
+
+    const query = {};
+    if (req.query.search) {
+      query.name = { $regex: req.query.search, $options: 'i' };
+    }
+    if (req.query.category) {
+      query.category = req.query.category;
+    }
+    if (req.query.inStock) {
+      query.inStock = req.query.inStock === 'true';
+    }
+    if (req.query.featured) {
+      query.isFeatured = req.query.featured === 'true';
+    }
+
+    const sort = buildSort(req.query.sortBy, req.query.sortOrder);
+
+    // Use aggregation to handle corrupted reviews data
+    const pipeline = [
+      { $match: query },
+      {
+        $addFields: {
+          reviews: {
+            $cond: {
+              if: { $type: "$reviews" },
+              then: {
+                $cond: {
+                  if: { $eq: [{ $type: "$reviews" }, "number"] },
+                  then: { count: "$reviews", data: [] },
+                  else: "$reviews"
+                }
+              },
+              else: { count: 0, data: [] }
+            }
+          }
+        }
+      },
+      { $sort: sort },
+      { $skip: skip },
+      { $limit: limit },
+      { $project: { __v: 0 } }
+    ];
+
+    const products = await Product.aggregate(pipeline);
+    const total = await Product.countDocuments(query);
+
+    res.status(200).json({
+      success: true,
+      count: products.length,
+      total,
+      pagination: {
+        page,
+        pages: Math.ceil(total / limit),
+      },
+      data: products,
+    });
+  } catch (error) {
+    console.error('Get all products for admin error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching products for admin',
+    });
+  }
+};
+
+// @desc    Get single product by ID for Admin (includes inactive products)
+// @route   GET /api/admin/products/:id
+// @access  Private (Admin)
+const getProductByIdForAdmin = async (req, res) => {
+  try {
+    // Use aggregation to handle corrupted reviews data
+    const pipeline = [
+      { $match: { _id: new mongoose.Types.ObjectId(req.params.id) } },
+      {
+        $addFields: {
+          reviews: {
+            $cond: {
+              if: { $type: "$reviews" },
+              then: {
+                $cond: {
+                  if: { $eq: [{ $type: "$reviews" }, "number"] },
+                  then: { count: "$reviews", data: [] },
+                  else: "$reviews"
+                }
+              },
+              else: { count: 0, data: [] }
+            }
+          }
+        }
+      },
+      { $project: { __v: 0 } }
+    ];
+
+    const products = await Product.aggregate(pipeline);
+    const product = products[0];
+    
+    if (!product) {
+      return res.status(404).json({
+        success: false,
+        message: 'Product not found'
+      });
+    }
+    
+    res.status(200).json({
+      success: true,
+      data: product
+    });
+    
+  } catch (error) {
+    console.error('Get product by ID for admin error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching product'
+    });
+  }
+};
+
 module.exports = {
   getAllProducts,
   getProductById,
@@ -1002,5 +1203,7 @@ module.exports = {
   deleteProductImage,
   updateInventory,
   getProductReviews,
-  addProductReview
+  addProductReview,
+  getAllProductsForAdmin,
+  getProductByIdForAdmin,
 }; 
