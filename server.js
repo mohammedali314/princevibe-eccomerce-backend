@@ -25,6 +25,7 @@ const orderRoutes = require('./routes/orderRoutes');
 const authRoutes = require('./routes/authRoutes');
 const paymentRoutes = require('./routes/paymentRoutes');
 const reviewRoutes = require('./routes/reviewRoutes');
+const pixelRoutes = require('./routes/pixelRoutes');
 const securityMiddleware = require('./middleware/security');
 const emailService = require('./utils/emailService');
 
@@ -117,6 +118,7 @@ app.use(cors({
     
     const allowedOrigins = [
       'http://localhost:5173',
+      'http://127.0.0.1:5173',
       'http://localhost:5174',
       'http://localhost:3000',
       'http://localhost:5000',
@@ -130,6 +132,8 @@ app.use(cors({
       /\.vercel\.app$/,
       /\.netlify\.app$/
     ].filter(Boolean);
+    
+    console.log('CORS request from origin:', origin); // Debug log
     
     const isAllowed = allowedOrigins.some(pattern => {
       if (typeof pattern === 'string') {
@@ -192,6 +196,7 @@ app.use('/api/orders', orderRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/reviews', reviewRoutes);
+app.use('/api', pixelRoutes);
 
 // Enhanced health check route
 app.get('/api/health', (req, res) => {
