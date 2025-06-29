@@ -28,6 +28,10 @@ const reviewSchema = new mongoose.Schema({
     maxlength: [1000, 'Review text cannot exceed 1000 characters']
   },
   
+  images: [{
+    type: String // Cloudinary URLs
+  }],
+  
   date: {
     type: Date,
     default: Date.now

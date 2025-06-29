@@ -3,6 +3,9 @@ const router = express.Router();
 const { body, validationResult } = require('express-validator');
 const Review = require('../models/Review');
 const Product = require('../models/Product');
+const { uploadToCloudinary } = require('../config/cloudinary');
+const multer = require('multer');
+const upload = multer();
 
 // Validation middleware
 const validateReview = [
@@ -104,8 +107,8 @@ router.get('/:productId', async (req, res) => {
   }
 });
 
-// POST /api/reviews - Create a new review
-router.post('/', validateReview, async (req, res) => {
+// POST /api/reviews - Create a new review with image upload
+router.post('/', upload.array('images', 3), validateReview, async (req, res) => {
   try {
     // Check for validation errors
     const errors = validationResult(req);
@@ -136,12 +139,22 @@ router.post('/', validateReview, async (req, res) => {
       });
     }
 
+    // Handle image uploads to Cloudinary
+    let imageUrls = [];
+    if (req.files && req.files.length > 0) {
+      for (const file of req.files) {
+        const result = await uploadToCloudinary(file.buffer);
+        imageUrls.push(result.secure_url);
+      }
+    }
+
     // Create new review
     const review = new Review({
       productId,
       name,
       rating,
-      text
+      text,
+      images: imageUrls
     });
 
     await review.save();
@@ -217,6 +230,38 @@ router.get('/stats/:productId', async (req, res) => {
       success: false,
       message: 'Failed to fetch review statistics'
     });
+  }
+});
+
+// GET /api/reviews/admin-count/:productId - Get admin-set review count
+router.get('/admin-count/:productId', async (req, res) => {
+  try {
+    const { productId } = req.params;
+    const product = await Product.findById(productId).select('reviews.count');
+    if (!product) {
+      return res.status(404).json({ success: false, message: 'Product not found' });
+    }
+    res.json({ success: true, count: product.reviews?.count || 0 });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Failed to fetch review count' });
+  }
+});
+
+// PATCH /api/reviews/admin-count/:productId - Set admin-set review count (admin only, add auth as needed)
+router.patch('/admin-count/:productId', async (req, res) => {
+  try {
+    const { productId } = req.params;
+    const { count } = req.body;
+    if (typeof count !== 'number' || count < 0) {
+      return res.status(400).json({ success: false, message: 'Invalid count' });
+    }
+    const product = await Product.findByIdAndUpdate(productId, { 'reviews.count': count }, { new: true });
+    if (!product) {
+      return res.status(404).json({ success: false, message: 'Product not found' });
+    }
+    res.json({ success: true, count: product.reviews.count });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Failed to set review count' });
   }
 });
 
