@@ -3,47 +3,8 @@ const Order = require('../models/Order');
 const Product = require('../models/Product');
 const emailService = require('../utils/emailService');
 const { authenticate, optionalAuth } = require('../middleware/auth');
-const { Client, LocalAuth } = require('whatsapp-web.js');
 
 const router = express.Router();
-
-// WhatsApp integration
-let whatsappClient;
-
-// Initialize WhatsApp client only once
-if (!global._whatsappClient) {
-  whatsappClient = new Client({
-    puppeteer: {
-      headless: true,
-      args: ['--no-sandbox', '--disable-setuid-sandbox']
-    },
-    authStrategy: new LocalAuth({
-      clientId: 'prince-vibe-whatsapp'
-    })
-  });
-  
-  whatsappClient.on('qr', qr => {
-    console.log('Scan this QR with your WhatsApp app:');
-    require('qrcode-terminal').generate(qr, { small: true });
-  });
-  
-  whatsappClient.on('ready', () => {
-    console.log('WhatsApp client is ready for order notifications!');
-  });
-  
-  whatsappClient.on('authenticated', () => {
-    console.log('WhatsApp client authenticated successfully!');
-  });
-  
-  whatsappClient.on('auth_failure', msg => {
-    console.error('WhatsApp authentication failed:', msg);
-  });
-  
-  whatsappClient.initialize();
-  global._whatsappClient = whatsappClient;
-} else {
-  whatsappClient = global._whatsappClient;
-}
 
 // @desc    Create a new order
 // @route   POST /api/orders
@@ -177,30 +138,6 @@ const createOrder = async (req, res) => {
           { $inc: { quantity: -orderItem.quantity } }
         );
       }
-    }
-
-    // WhatsApp notification logic
-    if (whatsappClient && whatsappClient.info && whatsappClient.info.wid) {
-      try {
-        let itemLines = items.map(item => `• ${item.name} x${item.quantity} (Rs ${item.price})`).join('\n');
-        let message = `🛒 *New Order Received!*
-Order #: ${order.orderNumber}
-Customer: ${customer.name}
-Phone: ${customer.phone}
-Email: ${customer.email}
-City: ${customer.address.city}
-
-*Items:*
-${itemLines}
-
-*Total:* Rs ${summary.total}\n`;
-        whatsappClient.sendMessage('923089747141@c.us', message);
-        console.log('WhatsApp order notification sent.');
-      } catch (waError) {
-        console.error('Failed to send WhatsApp notification:', waError);
-      }
-    } else {
-      console.warn('WhatsApp client not ready, order notification not sent.');
     }
 
     // Send order confirmation email
