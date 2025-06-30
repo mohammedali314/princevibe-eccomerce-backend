@@ -135,4 +135,7 @@ serviceAccountKey.json
 # API keys and secrets
 api-keys.txt
 secrets.txt
-credentials.txt 
+credentials.txt
+
+# WhatsApp Web.js session cache
+.wwebjs_cache/ 
