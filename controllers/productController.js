@@ -609,19 +609,27 @@ const updateProduct = async (req, res) => {
           };
         } catch (uploadError) {
           console.error('Error uploading image:', uploadError);
-          throw new Error(`Failed to upload image: ${file.originalname}`);
+          // Instead of throwing error, return null and handle it later
+          return null;
         }
       });
 
       try {
-        newImages = await Promise.all(uploadPromises);
-        console.log('New images uploaded:', newImages.length);
+        const uploadResults = await Promise.all(uploadPromises);
+        // Filter out failed uploads
+        newImages = uploadResults.filter(result => result !== null);
+        
+        if (newImages.length === 0 && req.files.length > 0) {
+          console.warn('All image uploads failed, but continuing with product update');
+        } else if (newImages.length < req.files.length) {
+          console.warn(`Only ${newImages.length} out of ${req.files.length} images uploaded successfully`);
+        } else {
+          console.log('New images uploaded:', newImages.length);
+        }
       } catch (uploadError) {
-        return res.status(500).json({
-          success: false,
-          message: 'Failed to upload new images',
-          error: uploadError.message
-        });
+        console.error('Failed to process image uploads:', uploadError);
+        // Don't return error response, just log and continue without new images
+        newImages = [];
       }
     }
 
@@ -636,14 +644,24 @@ const updateProduct = async (req, res) => {
           try {
             await deleteFromCloudinary(publicId);
             console.log(`Deleted image from Cloudinary: ${publicId}`);
+            return true;
           } catch (deleteError) {
             console.error(`Failed to delete image: ${publicId}`, deleteError);
+            // Continue even if Cloudinary deletion fails
+            return false;
           }
         });
         
-        await Promise.all(deletePromises);
+        try {
+          const deleteResults = await Promise.all(deletePromises);
+          const successfulDeletes = deleteResults.filter(result => result === true).length;
+          console.log(`Successfully deleted ${successfulDeletes} out of ${imagesToDelete.length} images from Cloudinary`);
+        } catch (deleteError) {
+          console.error('Error during image deletion process:', deleteError);
+          // Continue with product update even if image deletion fails
+        }
         
-        // Remove from product images array
+        // Remove from product images array regardless of Cloudinary deletion success
         updatedImages = updatedImages.filter(img => !imagesToDelete.includes(img.publicId));
       } catch (parseError) {
         console.error('Error parsing imagesToDelete:', parseError);
@@ -718,6 +736,22 @@ const updateProduct = async (req, res) => {
         success: false,
         message: 'Validation error',
         errors: messages
+      });
+    }
+    
+    if (error.code === 11000) {
+      return res.status(400).json({
+        success: false,
+        message: 'Product with this SKU or slug already exists'
+      });
+    }
+    
+    // Handle network-related errors
+    if (error.code === 'ENOTFOUND' || error.code === 'ECONNREFUSED' || error.code === 'ETIMEDOUT') {
+      return res.status(503).json({
+        success: false,
+        message: 'Service temporarily unavailable. Please try again later.',
+        error: 'Network connectivity issue'
       });
     }
     

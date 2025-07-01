@@ -18,6 +18,19 @@ dotenv.config({
     path: process.env.NODE_ENV === 'production' ? './config/production.env' : '.env'
 });
 
+// Global error handlers to prevent crashes
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('❌ Unhandled Promise Rejection:', reason);
+  console.error('Promise:', promise);
+  // Don't exit the process, just log the error
+});
+
+process.on('uncaughtException', (error) => {
+  console.error('❌ Uncaught Exception:', error);
+  console.error('Stack:', error.stack);
+  // Don't exit the process, just log the error
+});
+
 // Import routes
 const productRoutes = require('./routes/productRoutes');
 const adminRoutes = require('./routes/adminRoutes');
@@ -352,20 +365,6 @@ process.on('SIGINT', () => {
     console.log('🍃 MongoDB connection closed');
     process.exit(0);
   });
-});
-
-// Uncaught Exception Handler
-process.on('uncaughtException', (err) => {
-  console.error('❌ Uncaught Exception:', err.message);
-  console.error(err.stack);
-  process.exit(1);
-});
-
-// Unhandled Promise Rejection
-process.on('unhandledRejection', (err, promise) => {
-  console.error('❌ Unhandled Promise Rejection:', err.message);
-  console.error(err.stack);
-  process.exit(1);
 });
 
 // Start server
